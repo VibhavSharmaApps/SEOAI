@@ -1,0 +1,182 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum SiteType {
+  SHOPIFY
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+  SCHEDULED
+}
+
+enum AutopilotRunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+// ============================================================================
+// MODELS
+// ============================================================================
+
+// User: Links application users to Clerk authentication
+// Why: Core identity table that connects Clerk auth to application data
+// - clerkId: Unique identifier from Clerk (used for auth lookups)
+// - email: User's email (for display and communication)
+// - Sites: One user can own multiple Shopify stores
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  sites Site[]
+
+  @@map("users")
+}
+
+// Site: Represents a Shopify store connected to the platform
+// Why: Central entity for organizing all SEO work per store
+// - domain: Store's primary domain (e.g., "example.myshopify.com")
+// - shopifyStoreUrl: Full Shopify store URL
+// - shopifyAccessToken: Encrypted token for Shopify API access
+// - All SEO entities (Keywords, Content, Prompts, Runs) belong to a Site
+model Site {
+  id                String   @id @default(cuid())
+  userId            String
+  type              SiteType @default(SHOPIFY)
+  domain            String
+  shopifyStoreUrl   String
+  shopifyAccessToken String? // Encrypted token for API access
+  name              String?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  keywords      Keyword[]
+  content       Content[]
+  prompts       Prompt[]
+  autopilotRuns AutopilotRun[]
+
+  @@unique([userId, domain])
+  @@map("sites")
+}
+
+// Keyword: SEO keywords tracked for a site
+// Why: Core SEO entity - tracks which keywords we're targeting per site
+// - keyword: The actual search term (e.g., "organic coffee beans")
+// - targetUrl: Which page/blog post should rank for this keyword
+// - currentRanking: Current Google ranking position (nullable if not ranked)
+// - Notes: For tracking research, competition, etc.
+model Keyword {
+  id            String   @id @default(cuid())
+  siteId        String
+  keyword       String
+  targetUrl     String?  // URL this keyword should rank for
+  currentRanking Int?    // Current Google ranking (1-100, null if not ranked)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, keyword])
+  @@map("keywords")
+}
+
+// Content: Shopify blog posts managed by the platform
+// Why: Tracks blog posts created/updated for SEO purposes
+// - shopifyArticleId: ID from Shopify's API (for syncing)
+// - title: Blog post title
+// - url: Full URL to the published post
+// - status: Whether it's draft, published, or scheduled
+// - publishedAt: When it was/will be published
+// - Links to the Site that owns it
+model Content {
+  id              String        @id @default(cuid())
+  siteId          String
+  shopifyArticleId String?      @unique // Shopify API article ID
+  title           String
+  url             String?
+  status          ContentStatus @default(DRAFT)
+  publishedAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@map("content")
+}
+
+// Prompt: Tracks AI prompts used for content generation
+// Why: Audit trail and optimization - see what prompts work best
+// - name: Human-readable name for the prompt (e.g., "Blog Intro Generator")
+// - promptText: The actual prompt template used
+// - version: For tracking prompt iterations (start at 1)
+// - Allows A/B testing and improving prompts over time
+model Prompt {
+  id          String   @id @default(cuid())
+  siteId      String
+  name        String
+  promptText  String   // The actual prompt template
+  version     Int      @default(1)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, name, version])
+  @@map("prompts")
+}
+
+// AutopilotRun: Logs weekly automated job executions
+// Why: Track when autopilot jobs run, their status, and results
+// - scheduledFor: When the job was scheduled to run
+// - startedAt: Actual start time
+// - completedAt: When it finished (null if still running/failed)
+// - status: Current state (PENDING, RUNNING, COMPLETED, FAILED)
+// - errorMessage: If failed, what went wrong
+// - resultSummary: JSON field for storing job results/metrics
+model AutopilotRun {
+  id            String              @id @default(cuid())
+  siteId         String
+  scheduledFor   DateTime
+  startedAt      DateTime?
+  completedAt    DateTime?
+  status         AutopilotRunStatus @default(PENDING)
+  errorMessage   String?
+  resultSummary  Json?              // JSON object for flexible result storage
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  // Relations
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, scheduledFor])
+  @@map("autopilot_runs")
+}

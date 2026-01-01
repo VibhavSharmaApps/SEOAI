@@ -10,31 +10,49 @@ A Next.js 14 project with TypeScript, Tailwind CSS, shadcn/ui, and Clerk authent
 npm install
 ```
 
-### 2. Set Up Clerk Authentication
+### 2. Set Up Environment Variables
 
-Create a `.env.local` file in the root directory with your Clerk keys:
+Create a `.env` file in the root directory with your Clerk keys and Supabase connection string:
 
 ```env
+# Clerk Authentication
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
 CLERK_SECRET_KEY=sk_test_...
+
+# Supabase Database
+DATABASE_URL="postgresql://postgres:[YOUR-PASSWORD]@[YOUR-PROJECT-REF].supabase.co:5432/postgres?pgbouncer=true&connection_limit=1"
 ```
 
-**To get your Clerk keys:**
-1. Go to [Clerk Dashboard](https://dashboard.clerk.com)
-2. Create a new application or select an existing one
-3. Navigate to **API Keys** section
-4. Copy the **Publishable Key** and **Secret Key**
-5. Paste them into your `.env.local` file
+**To get your keys:**
+- **Clerk:** Go to [Clerk Dashboard](https://dashboard.clerk.com) → API Keys
+- **Supabase:** Go to [Supabase Dashboard](https://app.supabase.com) → Settings → Database → Connection string
 
 See `ENV_SETUP.md` for detailed instructions.
 
-### 3. Start the Development Server
+### 3. Set Up Prisma Database
+
+After adding your `DATABASE_URL` to `.env`, run:
+
+```bash
+# Generate Prisma Client
+npm run db:generate
+
+# Create and run the initial migration
+npm run db:migrate
+```
+
+This will:
+- Generate the Prisma Client
+- Create the initial migration based on your schema
+- Apply the migration to your Supabase database
+
+### 5. Start the Development Server
 
 ```bash
 npm run dev
 ```
 
-### 4. Open Your Browser
+### 6. Open Your Browser
 
 Navigate to [http://localhost:3000](http://localhost:3000)
 
@@ -53,7 +71,10 @@ Navigate to [http://localhost:3000](http://localhost:3000)
   globals.css     - Global styles with Tailwind
 /lib
   utils.ts        - Utility functions (cn helper for shadcn/ui)
+  prisma.ts       - Prisma client instance
 /components       - Component directory (ready for shadcn/ui components)
+/prisma
+  schema.prisma   - Prisma database schema
 middleware.ts     - Clerk middleware for route protection
 ```
 
@@ -87,4 +108,11 @@ npx shadcn-ui@latest add card
 - `npm run build` - Build for production
 - `npm start` - Start production server
 - `npm run lint` - Run ESLint
+
+## Database Scripts
+
+- `npm run db:generate` - Generate Prisma Client
+- `npm run db:push` - Push schema changes to database (dev only)
+- `npm run db:migrate` - Create and run a new migration
+- `npm run db:studio` - Open Prisma Studio (database GUI)
 
