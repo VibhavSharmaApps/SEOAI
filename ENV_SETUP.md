@@ -75,3 +75,83 @@ postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.co
 - **Prisma reads from `.env` by default** - this works perfectly with Next.js which also reads `.env`
 - Make sure your `DATABASE_URL` is in quotes if it contains special characters
 
+## Shopify OAuth Variables
+
+Add Shopify API credentials to your `.env` file:
+
+```env
+SHOPIFY_API_KEY=your_shopify_api_key
+SHOPIFY_API_SECRET=your_shopify_api_secret
+SHOPIFY_ENCRYPTION_KEY=your_64_character_hex_encryption_key
+```
+
+**Note:** `SHOPIFY_API_KEY` is the same as "Client ID" in Shopify's interface. `SHOPIFY_API_SECRET` is the "Client Secret".
+
+### How to Get Your Shopify API Credentials
+
+1. Go to [Shopify Partners Dashboard](https://partners.shopify.com)
+2. Create a new app or select an existing app
+3. Go to **App setup** → **Client credentials**
+4. Copy the **Client ID** (this is your `SHOPIFY_API_KEY`) and **Client secret** (this is your `SHOPIFY_API_SECRET`)
+5. Paste them into your `.env` file
+
+**Important:** 
+- **Client ID** = `SHOPIFY_API_KEY` (they're the same thing)
+- **Client Secret** = `SHOPIFY_API_SECRET` (they're the same thing)
+
+### Generate Encryption Key
+
+The encryption key is used to securely store Shopify access tokens. Generate a secure key:
+
+**Using OpenSSL (recommended):**
+```bash
+openssl rand -hex 32
+```
+
+**Using Node.js:**
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Copy the generated key and add it to your `.env` file as `SHOPIFY_ENCRYPTION_KEY`.
+
+### App URL Configuration
+
+The app automatically detects the URL in different environments:
+
+- **Vercel (Production):** Automatically uses `VERCEL_URL` - no configuration needed! ✅
+- **Custom Domain:** Set `NEXT_PUBLIC_APP_URL=https://yourdomain.com` if you have a custom domain
+- **Local Development:** Falls back to `http://localhost:3000` automatically
+
+**For Vercel deployments:** You don't need to set `NEXT_PUBLIC_APP_URL` - it will automatically use your Vercel URL!
+
+**Optional:** If you want to override the automatic detection, you can set:
+```env
+NEXT_PUBLIC_APP_URL=https://your-custom-domain.com
+```
+
+This URL is used for OAuth redirects. Make sure it matches your app's URL exactly.
+
+### Shopify App Configuration
+
+In your Shopify app settings, configure:
+
+1. **Allowed redirection URL(s):**
+   - **Development:** `http://localhost:3000/api/shopify/callback`
+   - **Vercel Production:** `https://your-app.vercel.app/api/shopify/callback`
+   - **Custom Domain:** `https://yourdomain.com/api/shopify/callback`
+   
+   **Important:** Add ALL URLs you'll use (localhost for testing + Vercel URL + custom domain if applicable)
+
+2. **Required Scopes:**
+   - `read_content` - Read blog posts
+   - `write_content` - Create/update blog posts
+   - `read_products` - Read product information (if needed)
+
+### Important Notes
+
+- **Never commit your Shopify API secret or encryption key to version control**
+- The encryption key must be exactly 64 characters (32 bytes in hex)
+- Keep the encryption key secure - if it's lost, you'll need to re-authenticate all stores
+- The `NEXT_PUBLIC_APP_URL` must match your app's actual URL for OAuth to work
+

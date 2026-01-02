@@ -1,15 +1,32 @@
 import { auth } from "@clerk/nextjs/server"
 import { UserButton } from "@clerk/nextjs"
 import { redirect } from "next/navigation"
+import { prisma } from "@/lib/prisma"
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: { shopify?: string }
+}) {
   const { userId } = await auth()
 
   // Redirect to login if not authenticated
-  // This is a backup check since middleware should handle it
   if (!userId) {
     redirect("/login")
   }
+
+  // Get user and their site
+  const user = await prisma.user.findUnique({
+    where: { clerkId: userId },
+    include: { sites: true },
+  })
+
+  if (!user) {
+    redirect("/login")
+  }
+
+  const site = user.sites[0] // MVP: one site per user
+  const hasShopify = !!site?.shopifyAccessToken
 
   return (
     <main className="flex min-h-screen flex-col p-24">
@@ -18,13 +35,77 @@ export default async function DashboardPage() {
           <h1 className="text-3xl font-bold">Dashboard</h1>
           <UserButton afterSignOutUrl="/login" />
         </div>
+
+        {/* Success/Error Messages */}
+        {searchParams.shopify === "connected" && (
+          <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+            <p className="text-green-800 dark:text-green-200">
+              ✅ Shopify store connected successfully!
+            </p>
+          </div>
+        )}
+
+        {searchParams.shopify === "error" && (
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+            <p className="text-red-800 dark:text-red-200">
+              ❌ Failed to connect Shopify store. Please try again.
+            </p>
+          </div>
+        )}
+
+        {/* Shopify Connection Status */}
+        <div className="bg-card p-8 rounded-lg border mb-6">
+          <h2 className="text-xl font-semibold mb-4">Shopify Store</h2>
+          
+          {hasShopify ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-green-600 dark:text-green-400">●</span>
+                <span className="font-medium">Connected</span>
+              </div>
+              <div className="pl-6 space-y-1 text-sm text-muted-foreground">
+                <p><span className="font-medium">Domain:</span> {site.domain}</p>
+                <p><span className="font-medium">Store URL:</span> {site.shopifyStoreUrl}</p>
+                <p><span className="font-medium">Status:</span> {site.isActive ? "Active" : "Inactive"}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-muted-foreground">
+                Connect your Shopify store to get started with SEO automation.
+              </p>
+              <a
+                href="/dashboard/connect-shopify"
+                className="inline-block px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+              >
+                Connect Shopify Store
+              </a>
+            </div>
+          )}
+        </div>
+
+        {/* Additional Dashboard Content */}
         <div className="bg-card p-8 rounded-lg border">
+          <h2 className="text-xl font-semibold mb-4">Overview</h2>
           <p className="text-muted-foreground mb-4">
-            Welcome to your dashboard! You are successfully authenticated.
+            Welcome to your dashboard! {hasShopify ? "Your Shopify store is connected and ready." : "Connect your Shopify store to begin."}
           </p>
-          <p className="text-sm text-muted-foreground">
-            User ID: {userId}
-          </p>
+          {hasShopify && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+              <div className="p-4 bg-muted rounded-md">
+                <p className="text-sm text-muted-foreground">Keywords</p>
+                <p className="text-2xl font-bold">0</p>
+              </div>
+              <div className="p-4 bg-muted rounded-md">
+                <p className="text-sm text-muted-foreground">Blog Posts</p>
+                <p className="text-2xl font-bold">0</p>
+              </div>
+              <div className="p-4 bg-muted rounded-md">
+                <p className="text-sm text-muted-foreground">Autopilot Runs</p>
+                <p className="text-2xl font-bold">0</p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </main>
