@@ -1,5 +1,5 @@
 import { auth } from '@clerk/nextjs/server'
-import { redirect } from 'next/navigation'
+import { NextResponse } from 'next/server'
 import { exchangeCodeForToken, encryptToken } from '@/lib/shopify-oauth'
 import { prisma } from '@/lib/prisma'
 
@@ -82,10 +82,12 @@ export async function GET(request: Request) {
     }
     
     // Redirect to dashboard on success
-    redirect('/dashboard?shopify=connected')
+    const baseUrl = new URL(request.url).origin
+    return NextResponse.redirect(`${baseUrl}/dashboard?shopify=connected`)
   } catch (error) {
     console.error('Shopify OAuth callback error:', error)
-    redirect('/dashboard?shopify=error')
+    const baseUrl = new URL(request.url).origin
+    return NextResponse.redirect(`${baseUrl}/dashboard?shopify=error`)
   }
 }
 

@@ -1,5 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
+import { NextResponse } from 'next/server'
 import { getShopifyAuthUrl, validateShopDomain } from '@/lib/shopify-oauth'
 import { getAppUrl } from '@/lib/app-url'
 
@@ -41,9 +42,10 @@ export async function GET(request: Request) {
     const state = Buffer.from(JSON.stringify({ userId, shop: shopDomain })).toString('base64')
     const finalAuthUrl = `${authUrl}&state=${encodeURIComponent(state)}`
     
-    // Redirect to Shopify OAuth page
-    redirect(finalAuthUrl)
+    // Use NextResponse.redirect() instead of redirect() to avoid catching NEXT_REDIRECT error
+    return NextResponse.redirect(finalAuthUrl)
   } catch (error) {
+    // Handle actual errors (validation, URL generation, etc.)
     console.error('Shopify OAuth initiation error:', error)
     return new Response(
       `Error initiating OAuth: ${error instanceof Error ? error.message : 'Unknown error'}`,
