@@ -15,6 +15,7 @@ export default async function LoginPage() {
       <div className="z-10 max-w-md w-full">
         <div className="flex justify-center">
           <SignIn
+            afterSignInUrl="/dashboard"
             appearance={{
               elements: {
                 rootBox: "mx-auto",

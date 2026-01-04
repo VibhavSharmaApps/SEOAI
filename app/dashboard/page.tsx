@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server"
+import { auth, currentUser } from "@clerk/nextjs/server"
 import { UserButton } from "@clerk/nextjs"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
@@ -15,14 +15,38 @@ export default async function DashboardPage({
     redirect("/login")
   }
 
-  // Get user and their site
-  const user = await prisma.user.findUnique({
+  // Get or create user in database
+  let user = await prisma.user.findUnique({
     where: { clerkId: userId },
     include: { sites: true },
   })
 
+  // If user doesn't exist in database, create them
+  // This happens on first login after Clerk authentication
   if (!user) {
-    redirect("/login")
+    // Get user info from Clerk
+    const clerkUser = await currentUser()
+    
+    if (!clerkUser) {
+      redirect("/login")
+    }
+
+    // Get primary email
+    const primaryEmail = clerkUser.emailAddresses.find(
+      (email) => email.id === clerkUser.primaryEmailAddressId
+    )?.emailAddress || clerkUser.emailAddresses[0]?.emailAddress || ''
+
+    // Create user in database
+    user = await prisma.user.create({
+      data: {
+        clerkId: userId,
+        email: primaryEmail,
+        name: clerkUser.firstName && clerkUser.lastName 
+          ? `${clerkUser.firstName} ${clerkUser.lastName}`
+          : clerkUser.firstName || clerkUser.lastName || null,
+      },
+      include: { sites: true },
+    })
   }
 
   const site = user.sites[0] // MVP: one site per user
