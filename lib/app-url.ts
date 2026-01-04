@@ -8,9 +8,9 @@ export function getAppUrl(): string {
     return `https://${process.env.VERCEL_URL}`
   }
   
-  // Use explicit NEXT_PUBLIC_APP_URL if set
+  // Use explicit NEXT_PUBLIC_APP_URL if set (trim any whitespace)
   if (process.env.NEXT_PUBLIC_APP_URL) {
-    return process.env.NEXT_PUBLIC_APP_URL
+    return process.env.NEXT_PUBLIC_APP_URL.trim()
   }
   
   // Fallback to localhost for development

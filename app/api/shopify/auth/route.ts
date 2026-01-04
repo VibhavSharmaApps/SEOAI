@@ -32,7 +32,11 @@ export async function GET(request: Request) {
     // Generate redirect URI (callback URL)
     // Automatically detects Vercel URL or uses NEXT_PUBLIC_APP_URL
     const baseUrl = getAppUrl()
-    const redirectUri = `${baseUrl}/api/shopify/callback`
+    // Ensure no trailing slashes and proper formatting
+    const redirectUri = `${baseUrl.replace(/\/$/, '')}/api/shopify/callback`
+    
+    // Log the redirect URI for debugging (remove in production if needed)
+    console.log('Shopify OAuth Redirect URI:', redirectUri)
     
     // Generate OAuth URL
     const authUrl = getShopifyAuthUrl(shopDomain, redirectUri)
