@@ -1,8 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
-import { redirect } from 'next/navigation'
 import { NextResponse } from 'next/server'
 import { getShopifyAuthUrl, validateShopDomain } from '@/lib/shopify-oauth'
-import { getAppUrl } from '@/lib/app-url'
 
 /**
  * GET /api/shopify/auth
@@ -26,25 +24,23 @@ export async function GET(request: Request) {
   }
   
   try {
+    console.log(`[Shopify OAuth Initiation] Starting OAuth flow for user: ${userId}`)
+    console.log(`[Shopify OAuth Initiation] Input shop parameter: ${shop}`)
+    
     // Validate and normalize shop domain
     const shopDomain = validateShopDomain(shop)
+    console.log(`[Shopify OAuth Initiation] Normalized shop domain: ${shopDomain}`)
     
-    // Generate redirect URI (callback URL)
-    // Automatically detects Vercel URL or uses NEXT_PUBLIC_APP_URL
-    const baseUrl = getAppUrl()
-    // Ensure no trailing slashes and proper formatting
-    const redirectUri = `${baseUrl.replace(/\/$/, '')}/api/shopify/callback`
-    
-    // Log the redirect URI for debugging (remove in production if needed)
-    console.log('Shopify OAuth Redirect URI:', redirectUri)
-    
-    // Generate OAuth URL
-    const authUrl = getShopifyAuthUrl(shopDomain, redirectUri)
+    // Generate OAuth URL (redirect_uri is derived internally from NEXT_PUBLIC_APP_URL)
+    const authUrl = getShopifyAuthUrl(shopDomain)
     
     // Store shop domain in session/cookie for callback
     // For MVP, we'll pass it as state parameter
     const state = Buffer.from(JSON.stringify({ userId, shop: shopDomain })).toString('base64')
     const finalAuthUrl = `${authUrl}&state=${encodeURIComponent(state)}`
+    
+    console.log(`[Shopify OAuth Initiation] Final OAuth URL (with state): ${finalAuthUrl}`)
+    console.log(`[Shopify OAuth Initiation] Redirecting to Shopify...`)
     
     // Use NextResponse.redirect() instead of redirect() to avoid catching NEXT_REDIRECT error
     return NextResponse.redirect(finalAuthUrl)

@@ -57,8 +57,9 @@ export function decryptToken(encryptedToken: string): string {
 
 /**
  * Generates Shopify OAuth authorization URL
+ * Redirect URI is derived from NEXT_PUBLIC_APP_URL environment variable
  */
-export function getShopifyAuthUrl(shop: string, redirectUri: string): string {
+export function getShopifyAuthUrl(shop: string): string {
   const clientId = process.env.SHOPIFY_API_KEY
   const scopes = 'read_content,write_content,read_products' // Adjust scopes as needed
   
@@ -66,13 +67,37 @@ export function getShopifyAuthUrl(shop: string, redirectUri: string): string {
     throw new Error('SHOPIFY_API_KEY is not set')
   }
   
+  // Runtime guard: NEXT_PUBLIC_APP_URL is required in production
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim()
+  if (!appUrl) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('NEXT_PUBLIC_APP_URL environment variable is required in production')
+    }
+    // In development, fallback to localhost
+    console.warn('⚠️  NEXT_PUBLIC_APP_URL not set. Using localhost fallback for development.')
+  }
+  
+  // Construct redirect URI from environment variable
+  const baseUrl = appUrl || 'http://localhost:3000'
+  const redirectUri = `${baseUrl.replace(/\/$/, '')}/api/shopify/callback`
+  
+  console.log(`[getShopifyAuthUrl] Input parameters:`)
+  console.log(`  - shop: ${shop}`)
+  console.log(`  - redirect_uri: ${redirectUri} (derived from NEXT_PUBLIC_APP_URL: ${appUrl || 'localhost fallback'})`)
+  console.log(`  - client_id: ${clientId.substring(0, 10)}... (truncated)`)
+  console.log(`  - scopes: ${scopes}`)
+  
   const params = new URLSearchParams({
     client_id: clientId,
     scope: scopes,
     redirect_uri: redirectUri,
   })
   
-  return `https://${shop}/admin/oauth/authorize?${params.toString()}`
+  const authUrl = `https://${shop}/admin/oauth/authorize?${params.toString()}`
+  
+  console.log(`[getShopifyAuthUrl] Generated OAuth URL: ${authUrl}`)
+  
+  return authUrl
 }
 
 /**
