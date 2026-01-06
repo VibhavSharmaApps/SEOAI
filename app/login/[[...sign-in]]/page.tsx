@@ -2,7 +2,16 @@ import { SignIn } from "@clerk/nextjs"
 import { auth } from "@clerk/nextjs/server"
 import { redirect } from "next/navigation"
 
-export default async function LoginPage() {
+/**
+ * Catch-all route for Clerk sign-in pages
+ * Handles routes like:
+ * - /login
+ * - /login/factor-one (MFA)
+ * - /login/sso-callback
+ * - /login/continue (password reset, etc.)
+ * - etc.
+ */
+export default async function SignInPage() {
   const { userId } = await auth()
 
   // Redirect to dashboard if already logged in
