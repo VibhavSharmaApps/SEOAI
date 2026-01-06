@@ -9,7 +9,11 @@ async function shopifyRequest(
   accessToken: string,
   endpoint: string
 ): Promise<{ data: any; headers: Headers }> {
-  const url = `https://${shop}/admin/api/2024-01/${endpoint}`
+  // Use latest stable API version (2024-10 as of early 2025)
+  const apiVersion = '2024-10'
+  const url = `https://${shop}/admin/api/${apiVersion}/${endpoint}`
+  
+  console.log(`[Shopify API] Requesting: ${url}`)
   
   const response = await fetch(url, {
     headers: {
@@ -19,8 +23,9 @@ async function shopifyRequest(
   })
 
   if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`Shopify API error: ${response.status} - ${error}`)
+    const errorText = await response.text()
+    console.error(`[Shopify API] Error ${response.status} for ${url}:`, errorText)
+    throw new Error(`Shopify API error: ${response.status} - ${errorText}`)
   }
 
   return { data: await response.json(), headers: response.headers }
@@ -70,14 +75,16 @@ export async function fetchShopifyProducts(
 /**
  * Fetches all collections from Shopify
  * Returns: Array of { id, title, handle }
+ * Note: Fetches both custom_collections and smart_collections
  */
 export async function fetchShopifyCollections(
   shop: string,
   accessToken: string
 ): Promise<Array<{ id: string; title: string; handle: string }>> {
   const collections: any[] = []
-  let pageInfo: string | null = null
 
+  // Fetch custom collections
+  let pageInfo: string | null = null
   do {
     const params = new URLSearchParams({
       limit: '250',
@@ -88,10 +95,34 @@ export async function fetchShopifyCollections(
       params.append('page_info', pageInfo)
     }
 
-    const { data, headers } = await shopifyRequest(shop, accessToken, `collections.json?${params.toString()}`)
+    const { data, headers } = await shopifyRequest(shop, accessToken, `custom_collections.json?${params.toString()}`)
     
-    if (data.collections) {
-      collections.push(...data.collections)
+    if (data.custom_collections) {
+      collections.push(...data.custom_collections)
+    }
+
+    // Check for pagination using Link header
+    const linkHeader = headers.get('link') || ''
+    const nextPageMatch = linkHeader.match(/<[^>]+page_info=([^&>]+)[^>]*>; rel="next"/)
+    pageInfo = nextPageMatch ? decodeURIComponent(nextPageMatch[1]) : null
+  } while (pageInfo)
+
+  // Fetch smart collections
+  pageInfo = null
+  do {
+    const params = new URLSearchParams({
+      limit: '250',
+      fields: 'id,title,handle',
+    })
+
+    if (pageInfo) {
+      params.append('page_info', pageInfo)
+    }
+
+    const { data, headers } = await shopifyRequest(shop, accessToken, `smart_collections.json?${params.toString()}`)
+    
+    if (data.smart_collections) {
+      collections.push(...data.smart_collections)
     }
 
     // Check for pagination using Link header
