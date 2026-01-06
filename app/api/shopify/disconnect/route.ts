@@ -31,12 +31,18 @@ export async function POST() {
     }
 
     // Remove the access token (disconnect)
-    await prisma.site.update({
+    const updatedSite = await prisma.site.update({
       where: { id: site.id },
       data: {
         shopifyAccessToken: null,
         isActive: false,
       },
+    })
+
+    console.log('[Disconnect] Store disconnected:', {
+      siteId: updatedSite.id,
+      domain: updatedSite.domain,
+      hasToken: !!updatedSite.shopifyAccessToken,
     })
 
     return NextResponse.json({
