@@ -51,19 +51,25 @@ export async function POST() {
     console.log(`[Baseline] Starting baseline sync for shop: ${shop}`)
 
     // Fetch all data from Shopify
-    const [products, collections, articles] = await Promise.all([
-      fetchShopifyProducts(shop, accessToken),
-      fetchShopifyCollections(shop, accessToken),
-      fetchShopifyArticles(shop, accessToken),
-    ])
-
-    console.log(`[Baseline] Fetched: ${products.length} products, ${collections.length} collections, ${articles.length} articles`)
+    let products, collections, articles
+    try {
+      [products, collections, articles] = await Promise.all([
+        fetchShopifyProducts(shop, accessToken),
+        fetchShopifyCollections(shop, accessToken),
+        fetchShopifyArticles(shop, accessToken),
+      ])
+      console.log(`[Baseline] Fetched: ${products.length} products, ${collections.length} collections, ${articles.length} articles`)
+    } catch (fetchError) {
+      console.error('[Baseline] Error fetching from Shopify:', fetchError)
+      throw new Error(`Failed to fetch data from Shopify: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`)
+    }
 
     // Store products (idempotent upsert)
     let productCount = 0
-    for (const product of products) {
-      const url = `https://${shop}/products/${product.handle}`
-      await prisma.page.upsert({
+    try {
+      for (const product of products) {
+        const url = `https://${shop}/products/${product.handle}`
+        await prisma.page.upsert({
         where: {
           siteId_shopifyId_type: {
             siteId: site.id,
@@ -84,13 +90,18 @@ export async function POST() {
           url,
           lastUpdated: new Date(product.updated_at),
         },
-      })
-      productCount++
+        })
+        productCount++
+      }
+    } catch (dbError) {
+      console.error('[Baseline] Error storing products:', dbError)
+      throw new Error(`Failed to store products in database: ${dbError instanceof Error ? dbError.message : 'Unknown error'}. Make sure you've run: npm run db:migrate`)
     }
 
     // Store collections (idempotent upsert)
     let collectionCount = 0
-    for (const collection of collections) {
+    try {
+      for (const collection of collections) {
       const url = `https://${shop}/collections/${collection.handle}`
       await prisma.page.upsert({
         where: {
@@ -113,13 +124,18 @@ export async function POST() {
           url,
           lastUpdated: new Date(),
         },
-      })
-      collectionCount++
+        })
+        collectionCount++
+      }
+    } catch (dbError) {
+      console.error('[Baseline] Error storing collections:', dbError)
+      throw new Error(`Failed to store collections in database: ${dbError instanceof Error ? dbError.message : 'Unknown error'}`)
     }
 
     // Store articles (idempotent upsert)
     let articleCount = 0
-    for (const article of articles) {
+    try {
+      for (const article of articles) {
       // Construct URL using blog handle and article handle
       const url = `https://${shop}/blogs/${article.blog_handle}/${article.handle}`
       const publishedAt = article.published_at ? new Date(article.published_at) : new Date()
@@ -145,8 +161,12 @@ export async function POST() {
           url,
           lastUpdated: publishedAt,
         },
-      })
-      articleCount++
+        })
+        articleCount++
+      }
+    } catch (dbError) {
+      console.error('[Baseline] Error storing articles:', dbError)
+      throw new Error(`Failed to store articles in database: ${dbError instanceof Error ? dbError.message : 'Unknown error'}`)
     }
 
     // Get counts from database

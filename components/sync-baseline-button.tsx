@@ -21,7 +21,8 @@ export function SyncBaselineButton() {
       const data = await response.json()
 
       if (!response.ok) {
-        setError(data.error || data.message || 'Failed to sync baseline data')
+        const errorMsg = data.message || data.error || 'Failed to sync baseline data'
+        setError(`${errorMsg}${data.message && data.message !== data.error ? ` (${data.error})` : ''}`)
         return
       }
 
