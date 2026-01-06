@@ -7,7 +7,7 @@ import { SyncBaselineButton } from "@/components/sync-baseline-button"
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: { shopify?: string }
+  searchParams: { shopify?: string; msg?: string }
 }) {
   const { userId } = await auth()
 
