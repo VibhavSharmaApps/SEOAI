@@ -26,13 +26,34 @@ export function encryptToken(token: string): string {
     throw new Error('SHOPIFY_ENCRYPTION_KEY is required for token encryption')
   }
   
-  const iv = crypto.randomBytes(16)
-  const cipher = crypto.createCipheriv(ALGORITHM, Buffer.from(ENCRYPTION_KEY.slice(0, 32), 'hex'), iv)
+  if (ENCRYPTION_KEY.length !== 64) {
+    throw new Error(`SHOPIFY_ENCRYPTION_KEY must be exactly 64 characters (32 bytes in hex). Current length: ${ENCRYPTION_KEY.length}`)
+  }
   
-  let encrypted = cipher.update(token, 'utf8', 'hex')
-  encrypted += cipher.final('hex')
+  // Validate hex format
+  if (!/^[0-9a-fA-F]{64}$/.test(ENCRYPTION_KEY)) {
+    throw new Error('SHOPIFY_ENCRYPTION_KEY must be a valid hexadecimal string (64 hex characters)')
+  }
   
-  return iv.toString('hex') + ':' + encrypted
+  try {
+    const keyBuffer = Buffer.from(ENCRYPTION_KEY, 'hex')
+    if (keyBuffer.length !== 32) {
+      throw new Error(`Invalid key length: expected 32 bytes, got ${keyBuffer.length}`)
+    }
+    
+    const iv = crypto.randomBytes(16)
+    const cipher = crypto.createCipheriv(ALGORITHM, keyBuffer, iv)
+    
+    let encrypted = cipher.update(token, 'utf8', 'hex')
+    encrypted += cipher.final('hex')
+    
+    return iv.toString('hex') + ':' + encrypted
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('Invalid key length')) {
+      throw new Error(`Invalid SHOPIFY_ENCRYPTION_KEY: Key must be exactly 64 hexadecimal characters. Current length: ${ENCRYPTION_KEY.length}. Generate a new key with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`)
+    }
+    throw error
+  }
 }
 
 /**
@@ -43,16 +64,37 @@ export function decryptToken(encryptedToken: string): string {
     throw new Error('SHOPIFY_ENCRYPTION_KEY is required for token decryption')
   }
   
-  const parts = encryptedToken.split(':')
-  const iv = Buffer.from(parts[0], 'hex')
-  const encrypted = parts[1]
+  if (ENCRYPTION_KEY.length !== 64) {
+    throw new Error(`SHOPIFY_ENCRYPTION_KEY must be exactly 64 characters (32 bytes in hex). Current length: ${ENCRYPTION_KEY.length}`)
+  }
   
-  const decipher = crypto.createDecipheriv(ALGORITHM, Buffer.from(ENCRYPTION_KEY.slice(0, 32), 'hex'), iv)
+  // Validate hex format
+  if (!/^[0-9a-fA-F]{64}$/.test(ENCRYPTION_KEY)) {
+    throw new Error('SHOPIFY_ENCRYPTION_KEY must be a valid hexadecimal string (64 hex characters)')
+  }
   
-  let decrypted = decipher.update(encrypted, 'hex', 'utf8')
-  decrypted += decipher.final('utf8')
-  
-  return decrypted
+  try {
+    const keyBuffer = Buffer.from(ENCRYPTION_KEY, 'hex')
+    if (keyBuffer.length !== 32) {
+      throw new Error(`Invalid key length: expected 32 bytes, got ${keyBuffer.length}`)
+    }
+    
+    const parts = encryptedToken.split(':')
+    const iv = Buffer.from(parts[0], 'hex')
+    const encrypted = parts[1]
+    
+    const decipher = crypto.createDecipheriv(ALGORITHM, keyBuffer, iv)
+    
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8')
+    decrypted += decipher.final('utf8')
+    
+    return decrypted
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('Invalid key length')) {
+      throw new Error(`Invalid SHOPIFY_ENCRYPTION_KEY: Key must be exactly 64 hexadecimal characters. Current length: ${ENCRYPTION_KEY.length}. Generate a new key with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`)
+    }
+    throw error
+  }
 }
 
 /**
