@@ -3,6 +3,7 @@ import { UserButton } from "@clerk/nextjs"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { SyncBaselineButton } from "@/components/sync-baseline-button"
+import { DisconnectShopifyButton } from "@/components/disconnect-shopify-button"
 
 export default async function DashboardPage({
   searchParams,
@@ -108,12 +109,21 @@ export default async function DashboardPage({
                   <p><span className="font-medium">Status:</span> {site.isActive ? "Active" : "Inactive"}</p>
                 </div>
               </div>
-              <div className="pt-4 border-t">
-                <h3 className="text-sm font-semibold mb-2">Baseline Data Sync</h3>
-                <p className="text-xs text-muted-foreground mb-3">
-                  Sync products, collections, and blog articles from your Shopify store.
-                </p>
-                <SyncBaselineButton />
+              <div className="pt-4 border-t space-y-4">
+                <div>
+                  <h3 className="text-sm font-semibold mb-2">Baseline Data Sync</h3>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Sync products, collections, and blog articles from your Shopify store.
+                  </p>
+                  <SyncBaselineButton />
+                </div>
+                <div className="pt-4 border-t">
+                  <h3 className="text-sm font-semibold mb-2">Disconnect Store</h3>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Disconnect this Shopify store to connect a different one.
+                  </p>
+                  <DisconnectShopifyButton />
+                </div>
               </div>
             </div>
           ) : (
