@@ -103,7 +103,7 @@ export function decryptToken(encryptedToken: string): string {
  */
 export function getShopifyAuthUrl(shop: string): string {
   const clientId = process.env.SHOPIFY_API_KEY
-  const scopes = 'read_content,write_content,read_products' // Adjust scopes as needed
+  const scopes = 'read_content,write_content,read_products,read_collections' // Required scopes for baseline sync
   
   if (!clientId) {
     throw new Error('SHOPIFY_API_KEY is not set')
