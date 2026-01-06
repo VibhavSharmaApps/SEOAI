@@ -31,6 +31,12 @@ enum AutopilotRunStatus {
   FAILED
 }
 
+enum PageType {
+  PRODUCT
+  COLLECTION
+  ARTICLE
+}
+
 // ============================================================================
 // MODELS
 // ============================================================================
@@ -78,6 +84,7 @@ model Site {
   content       Content[]
   prompts       Prompt[]
   autopilotRuns AutopilotRun[]
+  pages         Page[]
 
   @@unique([userId, domain])
   @@map("sites")
@@ -179,4 +186,30 @@ model AutopilotRun {
 
   @@index([siteId, scheduledFor])
   @@map("autopilot_runs")
+}
+
+// Page: Unified storage for Shopify products, collections, and blog articles
+// Why: Baseline snapshot of all store pages for SEO analysis and tracking
+// - shopify_id: Shopify's ID for the resource (product/collection/article ID)
+// - type: Type of page (PRODUCT, COLLECTION, ARTICLE)
+// - title: Display title
+// - url: Full URL to the page (constructed from handle)
+// - last_updated: When the resource was last updated in Shopify
+model Page {
+  id          String   @id @default(cuid())
+  siteId      String
+  shopifyId   String   // Shopify resource ID
+  type        PageType
+  title       String
+  url         String
+  lastUpdated DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, shopifyId, type])
+  @@index([siteId, type])
+  @@map("pages")
 }

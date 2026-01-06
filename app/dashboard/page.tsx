@@ -2,6 +2,7 @@ import { auth, currentUser } from "@clerk/nextjs/server"
 import { UserButton } from "@clerk/nextjs"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
+import { SyncBaselineButton } from "@/components/sync-baseline-button"
 
 export default async function DashboardPage({
   searchParams,
@@ -82,15 +83,24 @@ export default async function DashboardPage({
           <h2 className="text-xl font-semibold mb-4">Shopify Store</h2>
           
           {hasShopify ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="text-green-600 dark:text-green-400">●</span>
-                <span className="font-medium">Connected</span>
+            <div className="space-y-4">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-green-600 dark:text-green-400">●</span>
+                  <span className="font-medium">Connected</span>
+                </div>
+                <div className="pl-6 space-y-1 text-sm text-muted-foreground">
+                  <p><span className="font-medium">Domain:</span> {site.domain}</p>
+                  <p><span className="font-medium">Store URL:</span> {site.shopifyStoreUrl}</p>
+                  <p><span className="font-medium">Status:</span> {site.isActive ? "Active" : "Inactive"}</p>
+                </div>
               </div>
-              <div className="pl-6 space-y-1 text-sm text-muted-foreground">
-                <p><span className="font-medium">Domain:</span> {site.domain}</p>
-                <p><span className="font-medium">Store URL:</span> {site.shopifyStoreUrl}</p>
-                <p><span className="font-medium">Status:</span> {site.isActive ? "Active" : "Inactive"}</p>
+              <div className="pt-4 border-t">
+                <h3 className="text-sm font-semibold mb-2">Baseline Data Sync</h3>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Sync products, collections, and blog articles from your Shopify store.
+                </p>
+                <SyncBaselineButton />
               </div>
             </div>
           ) : (
