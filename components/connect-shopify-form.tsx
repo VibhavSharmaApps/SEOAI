@@ -62,11 +62,17 @@ export function ConnectShopifyForm() {
 
       <div className="mt-6 p-4 bg-muted rounded-md">
         <h3 className="font-semibold mb-2">What happens next?</h3>
-        <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
-          <li>You'll be redirected to Shopify to authorize the connection</li>
-          <li>Review and approve the requested permissions</li>
-          <li>You'll be redirected back to your dashboard</li>
+        <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
+          <li>You'll be redirected to Shopify (you may need to log in)</li>
+          <li><strong>Look for the authorization page</strong> - it will ask for permission</li>
+          <li><strong>Click "Install app" or "Allow"</strong> to approve the connection</li>
+          <li>You'll be automatically redirected back to your dashboard</li>
         </ol>
+        <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded">
+          <p className="text-xs text-blue-800 dark:text-blue-200">
+            <strong>Important:</strong> After clicking "Connect", look for Shopify's authorization page and click "Install app" or "Allow". Don't just close the tab!
+          </p>
+        </div>
       </div>
     </div>
   )
