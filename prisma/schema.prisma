@@ -95,6 +95,7 @@ model Site {
 // - keyword: The actual search term (e.g., "organic coffee beans")
 // - targetUrl: Which page/blog post should rank for this keyword
 // - currentRanking: Current Google ranking position (nullable if not ranked)
+// - source: Where the keyword came from (e.g., "product:123", "collection:456", "seed")
 // - Notes: For tracking research, competition, etc.
 model Keyword {
   id            String   @id @default(cuid())
@@ -102,6 +103,7 @@ model Keyword {
   keyword       String
   targetUrl     String?  // URL this keyword should rank for
   currentRanking Int?    // Current Google ranking (1-100, null if not ranked)
+  source        String?  // Source of the keyword (e.g., "product:123", "collection:456", "seed")
   notes         String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
