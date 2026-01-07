@@ -59,7 +59,29 @@ export function SeedKeywordsButton() {
           <div className="text-sm text-green-700 dark:text-green-300 space-y-1">
             <p><strong>Pages Processed:</strong> {result.pagesProcessed || 0}</p>
             <p><strong>Keywords Created:</strong> {result.keywordsCreated || 0}</p>
+            {result.keywordsSkipped > 0 && (
+              <p><strong>Keywords Skipped (already exist):</strong> {result.keywordsSkipped}</p>
+            )}
+            <p><strong>Total Keywords in Database:</strong> {result.totalKeywordsInDatabase || 0}</p>
           </div>
+          {result.pageDetails && result.pageDetails.length > 0 && (
+            <details className="mt-3">
+              <summary className="text-xs cursor-pointer text-green-600 dark:text-green-400 font-semibold">
+                View page-by-page breakdown
+              </summary>
+              <div className="mt-2 space-y-2 text-xs">
+                {result.pageDetails.map((page: any, idx: number) => (
+                  <div key={idx} className="p-2 bg-white dark:bg-gray-900 rounded border">
+                    <p className="font-semibold">{page.pageTitle} ({page.pageType})</p>
+                    <div className="text-muted-foreground mt-1">
+                      <p>Generated: {page.keywordsGenerated} | Created: {page.keywordsCreated} | Skipped: {page.keywordsSkipped}</p>
+                      {page.error && <p className="text-red-600">Error: {page.error}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
           <details className="mt-2">
             <summary className="text-xs cursor-pointer text-green-600 dark:text-green-400">
               View full response
