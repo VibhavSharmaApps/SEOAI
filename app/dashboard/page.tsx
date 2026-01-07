@@ -4,6 +4,8 @@ import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { SyncBaselineButton } from "@/components/sync-baseline-button"
 import { DisconnectShopifyButton } from "@/components/disconnect-shopify-button"
+import { SeedKeywordsButton } from "@/components/seed-keywords-button"
+import { KeywordsList } from "@/components/keywords-list"
 
 export default async function DashboardPage({
   searchParams,
@@ -53,6 +55,13 @@ export default async function DashboardPage({
 
   const site = user.sites[0] // MVP: one site per user
   const hasShopify = !!site?.shopifyAccessToken
+
+  // Get keyword count
+  const keywordCount = site
+    ? await prisma.keyword.count({
+        where: { siteId: site.id },
+      })
+    : 0
 
   return (
     <main className="flex min-h-screen flex-col p-24">
@@ -118,6 +127,13 @@ export default async function DashboardPage({
                   <SyncBaselineButton />
                 </div>
                 <div className="pt-4 border-t">
+                  <h3 className="text-sm font-semibold mb-2">Keyword Seeding</h3>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Generate SEO keywords for all products and collections using AI.
+                  </p>
+                  <SeedKeywordsButton />
+                </div>
+                <div className="pt-4 border-t">
                   <h3 className="text-sm font-semibold mb-2">Disconnect Store</h3>
                   <p className="text-xs text-muted-foreground mb-3">
                     Disconnect this Shopify store to connect a different one.
@@ -142,7 +158,7 @@ export default async function DashboardPage({
         </div>
 
         {/* Additional Dashboard Content */}
-        <div className="bg-card p-8 rounded-lg border">
+        <div className="bg-card p-8 rounded-lg border mb-6">
           <h2 className="text-xl font-semibold mb-4">Overview</h2>
           <p className="text-muted-foreground mb-4">
             Welcome to your dashboard! {hasShopify ? "Your Shopify store is connected and ready." : "Connect your Shopify store to begin."}
@@ -151,7 +167,7 @@ export default async function DashboardPage({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
               <div className="p-4 bg-muted rounded-md">
                 <p className="text-sm text-muted-foreground">Keywords</p>
-                <p className="text-2xl font-bold">0</p>
+                <p className="text-2xl font-bold">{keywordCount}</p>
               </div>
               <div className="p-4 bg-muted rounded-md">
                 <p className="text-sm text-muted-foreground">Blog Posts</p>
@@ -164,6 +180,14 @@ export default async function DashboardPage({
             </div>
           )}
         </div>
+
+        {/* Keywords Section */}
+        {hasShopify && (
+          <div className="bg-card p-8 rounded-lg border">
+            <h2 className="text-xl font-semibold mb-4">Keywords</h2>
+            <KeywordsList />
+          </div>
+        )}
       </div>
     </main>
   )
