@@ -5,6 +5,9 @@ import { decryptToken } from '@/lib/shopify-oauth'
 import { fetchProductDescription } from '@/lib/shopify-product-details'
 import { generateKeywords } from '@/lib/openai'
 
+// Force dynamic rendering (required for auth and database queries)
+export const dynamic = 'force-dynamic'
+
 /**
  * POST /api/keywords/seed
  * Generates and seeds keywords for all product and collection pages

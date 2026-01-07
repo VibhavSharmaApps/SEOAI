@@ -2,6 +2,9 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
+// Force dynamic rendering (required for auth and database queries)
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/keywords/list
  * Returns all keywords for the authenticated user's site
