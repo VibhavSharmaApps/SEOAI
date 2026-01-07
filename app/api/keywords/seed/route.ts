@@ -70,13 +70,26 @@ export async function POST() {
         }
 
         // Generate keywords using LLM
+        console.log(`[Keywords Seed] Generating keywords for ${page.type}: "${page.title}"${description ? ` (with description)` : ' (title only)'}`)
         const keywordPhrases = await generateKeywords(page.title, description)
 
-        console.log(`[Keywords Seed] Generated ${keywordPhrases.length} keywords for ${page.type}: ${page.title}`)
+        console.log(`[Keywords Seed] Generated ${keywordPhrases.length} keywords:`, keywordPhrases)
+
+        if (keywordPhrases.length === 0) {
+          console.warn(`[Keywords Seed] No keywords generated for ${page.type}: ${page.title}`)
+          continue
+        }
 
         // Store keywords (idempotent - skip if already exists)
+        let createdForThisPage = 0
+        let skippedForThisPage = 0
+
         for (const keywordPhrase of keywordPhrases) {
-          if (!keywordPhrase.trim()) continue
+          const trimmed = keywordPhrase.trim()
+          if (!trimmed) {
+            console.log(`[Keywords Seed] Skipping empty keyword`)
+            continue
+          }
 
           const source = `${page.type.toLowerCase()}:${page.shopifyId}`
 
@@ -84,20 +97,26 @@ export async function POST() {
             await prisma.keyword.create({
               data: {
                 siteId: site.id,
-                keyword: keywordPhrase.trim(),
+                keyword: trimmed,
                 source,
               },
             })
             totalKeywordsCreated++
+            createdForThisPage++
+            console.log(`[Keywords Seed] ✓ Created keyword: "${trimmed}" (source: ${source})`)
           } catch (error: any) {
             // Skip if keyword already exists (unique constraint)
             if (error.code === 'P2002') {
-              console.log(`[Keywords Seed] Keyword already exists: ${keywordPhrase}`)
+              skippedForThisPage++
+              console.log(`[Keywords Seed] ⊘ Keyword already exists: "${trimmed}"`)
               continue
             }
+            console.error(`[Keywords Seed] Error creating keyword "${trimmed}":`, error)
             throw error
           }
         }
+
+        console.log(`[Keywords Seed] Page "${page.title}": Created ${createdForThisPage}, Skipped ${skippedForThisPage}`)
 
         // Small delay to avoid rate limits
         await new Promise((resolve) => setTimeout(resolve, 100))

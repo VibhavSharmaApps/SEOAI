@@ -65,21 +65,46 @@ Return only the keywords, one per line:`
     const data = await response.json()
     const content = data.choices[0]?.message?.content || ''
 
+    console.log(`[OpenAI] Raw response:`, content.substring(0, 200))
+
     // Parse keywords from response (one per line)
-    const keywords = content
+    let keywords = content
       .split('\n')
       .map((line: string) => line.trim())
-      .filter((line: string) => line.length > 0 && !line.match(/^\d+[\.\)]/)) // Remove numbering
+      .filter((line: string) => {
+        // Remove empty lines
+        if (line.length === 0) return false
+        // Remove numbered lists (1., 2., etc.)
+        if (line.match(/^\d+[\.\)]\s*/)) return false
+        // Remove markdown formatting
+        if (line.startsWith('-') || line.startsWith('*')) {
+          return line.substring(1).trim().length > 0
+        }
+        return true
+      })
+      .map((line: string) => {
+        // Remove markdown list markers
+        if (line.startsWith('-') || line.startsWith('*')) {
+          return line.substring(1).trim()
+        }
+        return line
+      })
+      .filter((line: string) => line.length > 0)
       .slice(0, 5) // Limit to 5 keywords
 
+    console.log(`[OpenAI] Parsed ${keywords.length} keywords:`, keywords)
+
     if (keywords.length === 0) {
+      console.warn(`[OpenAI] No keywords parsed, using fallback for: ${pageTitle}`)
       // Fallback: generate simple keywords from title
-      const words = pageTitle.toLowerCase().split(/\s+/)
-      return [
+      const words = pageTitle.toLowerCase().split(/\s+/).filter(w => w.length > 0)
+      const fallback = [
         pageTitle.toLowerCase(),
         words.slice(0, 3).join(' '),
         words.slice(-2).join(' '),
-      ].filter(Boolean)
+      ].filter(Boolean).filter((k, i, arr) => arr.indexOf(k) === i) // Remove duplicates
+      console.log(`[OpenAI] Fallback keywords:`, fallback)
+      return fallback
     }
 
     return keywords
