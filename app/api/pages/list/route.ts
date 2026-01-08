@@ -44,7 +44,7 @@ export async function GET(request: Request) {
       where.type = pageType
     }
 
-    // Fetch pages with content version counts
+    // Fetch pages with content version counts and keyword counts
     const pages = await prisma.page.findMany({
       where,
       orderBy: { createdAt: 'desc' },
@@ -66,16 +66,36 @@ export async function GET(request: Request) {
       },
     })
 
-    // Add version count to each page
-    const pagesWithCounts = pages.map((page) => ({
-      id: page.id,
-      type: page.type,
-      title: page.title,
-      url: page.url,
-      shopifyId: page.shopifyId,
-      contentVersionsCount: page.contentVersions.length,
-      latestVersion: page.contentVersions[0]?.version || 0,
-    }))
+    // Get keyword counts per page
+    const keywordCounts = await prisma.keyword.groupBy({
+      by: ['source'],
+      where: { siteId: site.id },
+      _count: true,
+    })
+
+    // Create a map of source -> count
+    const sourceCountMap = new Map<string, number>()
+    keywordCounts.forEach((item) => {
+      if (item.source) {
+        sourceCountMap.set(item.source, item._count)
+      }
+    })
+
+    // Add version count and keyword count to each page
+    const pagesWithCounts = pages.map((page) => {
+      const source = `${page.type.toLowerCase()}:${page.shopifyId}`
+      const keywordCount = sourceCountMap.get(source) || 0
+      return {
+        id: page.id,
+        type: page.type,
+        title: page.title,
+        url: page.url,
+        shopifyId: page.shopifyId,
+        contentVersionsCount: page.contentVersions.length,
+        latestVersion: page.contentVersions[0]?.version || 0,
+        keywordCount,
+      }
+    })
 
     // Group by type for summary
     const byType = await prisma.page.groupBy({

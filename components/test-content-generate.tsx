@@ -10,6 +10,13 @@ interface Page {
   shopifyId: string
   contentVersionsCount: number
   latestVersion: number
+  keywordCount?: number
+}
+
+interface Keyword {
+  id: string
+  keyword: string
+  source: string | null
 }
 
 interface GenerateResult {
@@ -24,8 +31,10 @@ interface GenerateResult {
 
 export function TestContentGenerate() {
   const [pages, setPages] = useState<Page[]>([])
+  const [keywords, setKeywords] = useState<Keyword[]>([])
   const [loading, setLoading] = useState(false)
   const [loadingPages, setLoadingPages] = useState(true)
+  const [loadingKeywords, setLoadingKeywords] = useState(false)
   const [selectedPageId, setSelectedPageId] = useState<string>('')
   const [primaryKeyword, setPrimaryKeyword] = useState<string>('')
   const [results, setResults] = useState<GenerateResult[]>([])
@@ -35,6 +44,16 @@ export function TestContentGenerate() {
   useEffect(() => {
     fetchPages()
   }, [])
+
+  // Fetch keywords when page selection changes
+  useEffect(() => {
+    if (selectedPageId) {
+      fetchKeywordsForPage()
+    } else {
+      setKeywords([])
+      setPrimaryKeyword('')
+    }
+  }, [selectedPageId])
 
   const fetchPages = async () => {
     try {
@@ -56,6 +75,40 @@ export function TestContentGenerate() {
       console.error(err)
     } finally {
       setLoadingPages(false)
+    }
+  }
+
+  const fetchKeywordsForPage = async () => {
+    const selectedPage = pages.find((p) => p.id === selectedPageId)
+    if (!selectedPage) return
+
+    try {
+      setLoadingKeywords(true)
+      // Build source pattern: product:123 or collection:456
+      const sourcePattern = `${selectedPage.type.toLowerCase()}:${selectedPage.shopifyId}`
+      
+      const response = await fetch(`/api/keywords/list?source=${encodeURIComponent(sourcePattern)}`, {
+        credentials: 'include',
+      })
+      const data = await response.json()
+      
+      if (data.success && data.keywords) {
+        setKeywords(data.keywords)
+        // Autopopulate first keyword if available
+        if (data.keywords.length > 0) {
+          setPrimaryKeyword(data.keywords[0].keyword)
+        } else {
+          setPrimaryKeyword('')
+        }
+      } else {
+        setKeywords([])
+        setPrimaryKeyword('')
+      }
+    } catch (err) {
+      console.error('Error loading keywords:', err)
+      setKeywords([])
+    } finally {
+      setLoadingKeywords(false)
     }
   }
 
@@ -137,27 +190,66 @@ export function TestContentGenerate() {
               >
                 {pages.map((page) => (
                   <option key={page.id} value={page.id}>
-                    {page.type} - {page.title} {page.contentVersionsCount > 0 && `(v${page.latestVersion})`}
+                    {page.type} - {page.title} 
+                    {page.contentVersionsCount > 0 && ` (v${page.latestVersion})`}
+                    {page.keywordCount !== undefined && page.keywordCount > 0 && ` [${page.keywordCount} keywords]`}
                   </option>
                 ))}
               </select>
               {selectedPage && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Type: {selectedPage.type} | Existing versions: {selectedPage.contentVersionsCount}
+                  Type: {selectedPage.type} | Content versions: {selectedPage.contentVersionsCount} | Keywords: {selectedPage.keywordCount || 0}
                 </p>
               )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Primary Keyword</label>
-              <input
-                type="text"
-                value={primaryKeyword}
-                onChange={(e) => setPrimaryKeyword(e.target.value)}
-                placeholder="e.g., organic coffee beans"
-                className="w-full px-3 py-2 border rounded-md bg-background text-foreground"
-                disabled={loading}
-              />
+              <label className="block text-sm font-medium mb-1">
+                Primary Keyword
+                {keywords.length > 0 && (
+                  <span className="text-xs text-muted-foreground ml-2">
+                    ({keywords.length} keywords available)
+                  </span>
+                )}
+              </label>
+              {loadingKeywords ? (
+                <p className="text-xs text-muted-foreground">Loading keywords...</p>
+              ) : keywords.length > 0 ? (
+                <div className="space-y-2">
+                  <select
+                    value={primaryKeyword}
+                    onChange={(e) => setPrimaryKeyword(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-md bg-background text-foreground"
+                    disabled={loading}
+                  >
+                    {keywords.map((kw) => (
+                      <option key={kw.id} value={kw.keyword}>
+                        {kw.keyword}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    Or type a custom keyword below
+                  </p>
+                  <input
+                    type="text"
+                    value={primaryKeyword}
+                    onChange={(e) => setPrimaryKeyword(e.target.value)}
+                    placeholder="Or enter custom keyword"
+                    className="w-full px-3 py-2 border rounded-md bg-background text-foreground"
+                    disabled={loading}
+                  />
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  value={primaryKeyword}
+                  onChange={(e) => setPrimaryKeyword(e.target.value)}
+                  placeholder="e.g., organic coffee beans (no keywords found for this page)"
+                  className="w-full px-3 py-2 border rounded-md bg-background text-foreground"
+                  disabled={loading}
+                />
+              )}
             </div>
 
             <button
