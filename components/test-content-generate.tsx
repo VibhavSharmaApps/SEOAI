@@ -29,6 +29,18 @@ interface GenerateResult {
   message?: string
 }
 
+interface PublishResult {
+  success: boolean
+  message?: string
+  pageId?: string
+  pageTitle?: string
+  pageType?: string
+  version?: number
+  publishedAt?: string
+  trackingEnabled?: boolean
+  error?: string
+}
+
 export function TestContentGenerate() {
   const [pages, setPages] = useState<Page[]>([])
   const [keywords, setKeywords] = useState<Keyword[]>([])
@@ -38,6 +50,8 @@ export function TestContentGenerate() {
   const [selectedPageId, setSelectedPageId] = useState<string>('')
   const [primaryKeyword, setPrimaryKeyword] = useState<string>('')
   const [results, setResults] = useState<GenerateResult[]>([])
+  const [publishResult, setPublishResult] = useState<PublishResult | null>(null)
+  const [publishing, setPublishing] = useState(false)
   const [error, setError] = useState<string>('')
 
   // Fetch pages on mount
@@ -126,6 +140,7 @@ export function TestContentGenerate() {
 
     setLoading(true)
     setError('')
+    setPublishResult(null)
 
     try {
       const response = await fetch('/api/content/generate', {
@@ -155,6 +170,45 @@ export function TestContentGenerate() {
       console.error(err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handlePublish = async () => {
+    if (!selectedPageId) {
+      setError('Please select a page')
+      return
+    }
+
+    setPublishing(true)
+    setError('')
+    setPublishResult(null)
+
+    try {
+      const response = await fetch('/api/content/publish', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          page_id: selectedPageId,
+        }),
+      })
+
+      const data: PublishResult = await response.json()
+
+      if (response.ok && data.success) {
+        setPublishResult(data)
+        // Refresh pages to update tracking status
+        fetchPages()
+      } else {
+        setError(data.error || data.message || 'Failed to publish content')
+      }
+    } catch (err) {
+      setError('Network error: ' + (err instanceof Error ? err.message : 'Unknown error'))
+      console.error(err)
+    } finally {
+      setPublishing(false)
     }
   }
 
@@ -252,13 +306,22 @@ export function TestContentGenerate() {
               )}
             </div>
 
-            <button
-              onClick={handleGenerate}
-              disabled={loading || !selectedPageId || !primaryKeyword.trim()}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Generating...' : 'Generate Content'}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleGenerate}
+                disabled={loading || !selectedPageId || !primaryKeyword.trim()}
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Generating...' : 'Generate Content'}
+              </button>
+              <button
+                onClick={handlePublish}
+                disabled={publishing || !selectedPageId || loading}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {publishing ? 'Publishing...' : 'Publish to Shopify'}
+              </button>
+            </div>
           </div>
 
           {error && (
@@ -319,6 +382,51 @@ export function TestContentGenerate() {
             </div>
           )}
 
+          {publishResult && (
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-blue-800 dark:text-blue-200 font-semibold">
+                    {publishResult.success ? '✅ Published Successfully' : '❌ Publish Failed'}
+                  </p>
+                  {publishResult.publishedAt && (
+                    <span className="text-xs text-blue-600 dark:text-blue-400">
+                      {new Date(publishResult.publishedAt).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+                {publishResult.message && (
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    {publishResult.message}
+                  </p>
+                )}
+                {publishResult.pageTitle && (
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    Page: {publishResult.pageTitle} ({publishResult.pageType})
+                  </p>
+                )}
+                {publishResult.version && (
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    Version: {publishResult.version}
+                  </p>
+                )}
+                {publishResult.trackingEnabled && (
+                  <p className="text-sm text-green-700 dark:text-green-300 font-semibold">
+                    ✓ Tracking enabled for this page
+                  </p>
+                )}
+                <details className="mt-2">
+                  <summary className="text-xs cursor-pointer text-blue-600 dark:text-blue-400">
+                    View Full Response
+                  </summary>
+                  <pre className="mt-2 text-xs bg-white dark:bg-gray-900 p-2 rounded overflow-auto">
+                    {JSON.stringify(publishResult, null, 2)}
+                  </pre>
+                </details>
+              </div>
+            </div>
+          )}
+
           {/* Test Instructions */}
           <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
             <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-200 mb-2">
@@ -340,6 +448,10 @@ export function TestContentGenerate() {
               </li>
               <li>
                 <strong>No overwrite:</strong> Generate 3 times - all 3 versions should exist in database.
+              </li>
+              <li>
+                <strong>Publish to Shopify:</strong> After generating content, click "Publish to Shopify" to push it live.
+                Only PRODUCT and ARTICLE pages can be published. COLLECTION pages are not supported.
               </li>
             </ul>
           </div>
