@@ -84,3 +84,4 @@ But we're **not using CLI**, so this doesn't apply to our setup.
 ✅ **Re-authenticate:** Required after updating Partners dashboard  
 ✅ **Then sync:** Should work!
 
+

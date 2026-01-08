@@ -191,3 +191,4 @@ Name the migration: `add_pages_table`
 - Handles Shopify API errors gracefully
 - Returns detailed error messages
 
+

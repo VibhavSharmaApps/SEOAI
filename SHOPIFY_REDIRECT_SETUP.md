@@ -122,3 +122,4 @@ The app logs the redirect URI. Check:
 4. **Try in incognito mode** to rule out browser issues
 5. **Check Vercel logs** for the exact URL being sent
 
+

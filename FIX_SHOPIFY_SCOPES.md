@@ -76,3 +76,4 @@ When you first connected, the app only requested `read_content` and `write_conte
 
 After adding the scope and re-authenticating, the sync should work!
 
+

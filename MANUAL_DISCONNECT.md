@@ -81,3 +81,4 @@ After disconnecting:
 2. Enter your new store domain
 3. Complete OAuth with your new Shopify app
 
+

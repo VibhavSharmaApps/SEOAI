@@ -74,3 +74,4 @@ node -e "const key = process.env.SHOPIFY_ENCRYPTION_KEY; console.log('Length:', 
 
 If this is your first connection, you can safely generate a new key.
 
+

@@ -123,3 +123,4 @@ node -e "console.log('ENCRYPTION_KEY:', process.env.SHOPIFY_ENCRYPTION_KEY ? 'SE
 3. **Watch the logs** in real-time
 4. **Check the dashboard** for the specific error message
 
+

@@ -227,3 +227,4 @@ NEXT_PUBLIC_APP_URL=https://your-app.vercel.app
 - ✅ Logging still shows the resolved redirect URI
 - ⚠️  Must set `NEXT_PUBLIC_APP_URL` in production environments
 
+

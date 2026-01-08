@@ -102,3 +102,4 @@ DevTools → Network tab to see what URL is returning 404.
 - `/sign-up` → Should be `/login` (fixed in ClerkProvider)
 - `/sso-callback` → Clerk internal route (should work automatically)
 
+
