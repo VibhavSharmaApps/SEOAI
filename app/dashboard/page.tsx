@@ -6,6 +6,7 @@ import { SyncBaselineButton } from "@/components/sync-baseline-button"
 import { DisconnectShopifyButton } from "@/components/disconnect-shopify-button"
 import { SeedKeywordsButton } from "@/components/seed-keywords-button"
 import { KeywordsList } from "@/components/keywords-list"
+import { TestContentGenerate } from "@/components/test-content-generate"
 
 export default async function DashboardPage({
   searchParams,
@@ -180,6 +181,14 @@ export default async function DashboardPage({
             </div>
           )}
         </div>
+
+        {/* Content Generation Test */}
+        {hasShopify && (
+          <div className="bg-card p-8 rounded-lg border mb-6">
+            <h2 className="text-xl font-semibold mb-4">Content Generation Test</h2>
+            <TestContentGenerate />
+          </div>
+        )}
 
         {/* Keywords Section */}
         {hasShopify && (
