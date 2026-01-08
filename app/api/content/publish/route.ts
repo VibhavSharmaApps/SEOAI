@@ -147,10 +147,23 @@ export async function POST(request: Request) {
       }
     } catch (shopifyError) {
       console.error('[Content Publish] Shopify API error:', shopifyError)
+      const errorMessage = shopifyError instanceof Error ? shopifyError.message : 'Unknown error'
+      
+      // Check for common errors and provide helpful messages
+      let userFriendlyMessage = errorMessage
+      if (errorMessage.includes('403') || errorMessage.includes('Unauthorized')) {
+        userFriendlyMessage = 'Missing required Shopify permissions. Please ensure your app has write_products and write_content scopes. Re-authenticate your store after adding these scopes.'
+      } else if (errorMessage.includes('404')) {
+        userFriendlyMessage = 'Product or article not found in Shopify. The item may have been deleted.'
+      } else if (errorMessage.includes('429')) {
+        userFriendlyMessage = 'Rate limit exceeded. Please wait a moment and try again.'
+      }
+      
       return NextResponse.json(
         {
           error: 'Failed to publish to Shopify',
-          message: shopifyError instanceof Error ? shopifyError.message : 'Unknown error',
+          message: userFriendlyMessage,
+          details: errorMessage,
         },
         { status: 500 }
       )

@@ -104,6 +104,48 @@ export async function POST(request: Request) {
       description
     )
 
+    // Check how many versions already exist for this page
+    const existingVersionsCount = await prisma.contentVersion.count({
+      where: { pageId: page_id },
+    })
+
+    const maxVersionsPerPage = 2
+    if (existingVersionsCount >= maxVersionsPerPage) {
+      // Get the oldest version to replace
+      const oldestVersion = await prisma.contentVersion.findFirst({
+        where: { pageId: page_id },
+        orderBy: { version: 'asc' },
+      })
+
+      if (!oldestVersion) {
+        return NextResponse.json(
+          { error: 'Unexpected error: No versions found but count indicates versions exist' },
+          { status: 500 }
+        )
+      }
+
+      // Update the oldest version instead of creating a new one
+      const updatedVersion = await prisma.contentVersion.update({
+        where: { id: oldestVersion.id },
+        data: {
+          content: generatedContent,
+          reason: 'initial_creation',
+          publishedAt: null, // Reset publish status when updating
+        },
+      })
+
+      console.log(`[Content Generate] Updated version ${updatedVersion.version} for page "${page.title}" (max ${maxVersionsPerPage} versions per page)`)
+
+      return NextResponse.json({
+        success: true,
+        content: generatedContent,
+        version: updatedVersion.version,
+        pageId: page_id,
+        pageTitle: page.title,
+        message: `Updated existing version (max ${maxVersionsPerPage} versions per page)`,
+      })
+    }
+
     // Get the next version number for this page
     const latestVersion = await prisma.contentVersion.findFirst({
       where: { pageId: page_id },

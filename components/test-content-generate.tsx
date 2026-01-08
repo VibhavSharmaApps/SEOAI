@@ -199,10 +199,14 @@ export function TestContentGenerate() {
 
       if (response.ok && data.success) {
         setPublishResult(data)
+        setError('') // Clear any previous errors
         // Refresh pages to update tracking status
         fetchPages()
       } else {
-        setError(data.error || data.message || 'Failed to publish content')
+        const errorMsg = data.error || data.message || 'Failed to publish content'
+        const details = (data as any).details ? `\n\nDetails: ${(data as any).details}` : ''
+        setError(errorMsg + details)
+        setPublishResult(null)
       }
     } catch (err) {
       setError('Network error: ' + (err instanceof Error ? err.message : 'Unknown error'))

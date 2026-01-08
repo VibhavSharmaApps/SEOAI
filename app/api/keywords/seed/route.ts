@@ -49,12 +49,12 @@ export async function POST() {
 
     console.log(`[Keywords Seed] Starting keyword generation for shop: ${shop}`)
 
-    // Fetch all product and collection pages
+    // Fetch all product, collection, and article pages
     const pages = await prisma.page.findMany({
       where: {
         siteId: site.id,
         type: {
-          in: ['PRODUCT', 'COLLECTION'],
+          in: ['PRODUCT', 'COLLECTION', 'ARTICLE'],
         },
       },
     })
@@ -75,11 +75,12 @@ export async function POST() {
     // Process pages in batches to avoid rate limits
     for (const page of pages) {
       try {
-        // Get product description if it's a product
+        // Get product description if it's a product (articles and collections don't have descriptions)
         let description: string | undefined
         if (page.type === 'PRODUCT') {
           description = (await fetchProductDescription(shop, accessToken, page.shopifyId)) || undefined
         }
+        // Articles and collections only use title for keyword generation
 
         // Generate keywords using LLM
         console.log(`[Keywords Seed] Generating keywords for ${page.type}: "${page.title}"${description ? ` (with description)` : ' (title only)'}`)
