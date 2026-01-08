@@ -7,6 +7,7 @@ import { DisconnectShopifyButton } from "@/components/disconnect-shopify-button"
 import { SeedKeywordsButton } from "@/components/seed-keywords-button"
 import { KeywordsList } from "@/components/keywords-list"
 import { TestContentGenerate } from "@/components/test-content-generate"
+import { CleanupDuplicatesButton } from "@/components/cleanup-duplicates-button"
 
 export default async function DashboardPage({
   searchParams,
@@ -133,6 +134,13 @@ export default async function DashboardPage({
                     Generate SEO keywords for all products and collections using AI.
                   </p>
                   <SeedKeywordsButton />
+                </div>
+                <div className="pt-4 border-t">
+                  <h3 className="text-sm font-semibold mb-2">Cleanup Duplicate Keywords</h3>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Remove excess keywords (keeps 2 oldest per page). The seeding logic now prevents duplicates, but this cleans up old ones.
+                  </p>
+                  <CleanupDuplicatesButton />
                 </div>
                 <div className="pt-4 border-t">
                   <h3 className="text-sm font-semibold mb-2">Disconnect Store</h3>
