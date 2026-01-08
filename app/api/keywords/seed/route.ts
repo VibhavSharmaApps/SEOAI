@@ -100,18 +100,45 @@ export async function POST() {
           continue
         }
 
+        // Check how many keywords already exist for this page
+        const source = `${page.type.toLowerCase()}:${page.shopifyId}`
+        const existingKeywordsCount = await prisma.keyword.count({
+          where: {
+            siteId: site.id,
+            source,
+          },
+        })
+
+        // Calculate how many keywords we can still add (max 2 per page)
+        const maxKeywordsPerPage = 2
+        const remainingSlots = Math.max(0, maxKeywordsPerPage - existingKeywordsCount)
+
+        if (remainingSlots === 0) {
+          console.log(`[Keywords Seed] Page "${page.title}" already has ${existingKeywordsCount} keywords (max ${maxKeywordsPerPage}). Skipping.`)
+          pageDetails.push({
+            pageTitle: page.title,
+            pageType: page.type,
+            keywordsGenerated: keywordPhrases.length,
+            keywordsCreated: 0,
+            keywordsSkipped: keywordPhrases.length,
+          })
+          continue
+        }
+
+        // Limit keywords to remaining slots
+        const keywordsToProcess = keywordPhrases.slice(0, remainingSlots)
+        console.log(`[Keywords Seed] Page "${page.title}" has ${existingKeywordsCount} existing keywords. Can add ${remainingSlots} more. Processing ${keywordsToProcess.length} keywords.`)
+
         // Store keywords (idempotent - skip if already exists)
         let createdForThisPage = 0
         let skippedForThisPage = 0
 
-        for (const keywordPhrase of keywordPhrases) {
+        for (const keywordPhrase of keywordsToProcess) {
           const trimmed = keywordPhrase.trim()
           if (!trimmed) {
             console.log(`[Keywords Seed] Skipping empty keyword`)
             continue
           }
-
-          const source = `${page.type.toLowerCase()}:${page.shopifyId}`
 
           try {
             await prisma.keyword.create({

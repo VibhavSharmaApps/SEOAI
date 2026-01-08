@@ -209,9 +209,33 @@ model Page {
   updatedAt   DateTime @updatedAt
 
   // Relations
-  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  site            Site             @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  contentVersions ContentVersion[]
 
   @@unique([siteId, shopifyId, type])
   @@index([siteId, type])
   @@map("pages")
+}
+
+// ContentVersion: Stores generated content versions for pages
+// Why: Track content iterations and versions for SEO optimization
+// - page_id: Which page this content is for
+// - version: Version number (starts at 1, increments for each new version)
+// - content: The generated content (HTML or markdown)
+// - reason: Why this version was created (e.g., "initial_creation", "seo_optimization", "a_b_test")
+// - Allows tracking content evolution and A/B testing
+model ContentVersion {
+  id        String   @id @default(cuid())
+  pageId    String
+  version   Int      // Version number (1, 2, 3, etc.)
+  content   String   // Generated content (HTML or markdown)
+  reason    String   // Reason for this version (e.g., "initial_creation")
+  createdAt DateTime @default(now())
+
+  // Relations
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, version])
+  @@index([pageId])
+  @@map("content_versions")
 }
