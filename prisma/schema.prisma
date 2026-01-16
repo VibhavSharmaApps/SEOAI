@@ -65,26 +65,32 @@ model User {
 // - domain: Store's primary domain (e.g., "example.myshopify.com")
 // - shopifyStoreUrl: Full Shopify store URL
 // - shopifyAccessToken: Encrypted token for Shopify API access
+// - googleOAuthToken: Encrypted Google OAuth access token for Search Console API
+// - googleOAuthRefreshToken: Encrypted Google OAuth refresh token
 // - All SEO entities (Keywords, Content, Prompts, Runs) belong to a Site
 model Site {
-  id                String   @id @default(cuid())
-  userId            String
-  type              SiteType @default(SHOPIFY)
-  domain            String
-  shopifyStoreUrl   String
-  shopifyAccessToken String? // Encrypted token for API access
-  name              String?
-  isActive          Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                    String   @id @default(cuid())
+  userId                String
+  type                  SiteType @default(SHOPIFY)
+  domain                String
+  shopifyStoreUrl       String
+  shopifyAccessToken    String? // Encrypted token for API access
+  googleOAuthToken      String? // Encrypted Google OAuth access token
+  googleOAuthRefreshToken String? // Encrypted Google OAuth refresh token
+  name                  String?
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   // Relations
-  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  keywords      Keyword[]
-  content       Content[]
-  prompts       Prompt[]
-  autopilotRuns AutopilotRun[]
-  pages         Page[]
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  keywords        Keyword[]
+  content         Content[]
+  prompts         Prompt[]
+  autopilotRuns   AutopilotRun[]
+  pages           Page[]
+  gscKeywordDaily GSCKeywordDaily[]
+  gscProperties   GSCProperty[]
 
   @@unique([userId, domain])
   @@map("sites")
@@ -113,6 +119,54 @@ model Keyword {
 
   @@unique([siteId, keyword])
   @@map("keywords")
+}
+
+// GSCKeywordDaily: Daily aggregates of Google Search Console keyword performance
+// Why: Track daily performance metrics for keywords over time
+// - keyword: The search query
+// - date: The date of the snapshot
+// - impressions: Total impressions for this keyword on this date
+// - clicks: Total clicks for this keyword on this date
+// - position: Average position for this keyword on this date
+// - Allows tracking keyword performance trends day-by-day
+model GSCKeywordDaily {
+  id         String   @id @default(cuid())
+  siteId     String
+  keyword    String
+  date       DateTime // Date of the snapshot
+  impressions Int     // Total impressions
+  clicks     Int     // Total clicks
+  position   Float    // Average position
+  createdAt  DateTime @default(now())
+
+  // Relations
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, keyword, date])
+  @@index([siteId, date])
+  @@index([date])
+  @@map("gsc_keyword_daily")
+}
+
+// GSCProperty: Tracks Google Search Console properties for a site
+// Why: Track which GSC properties are connected and their access status
+// - siteUrl: The GSC property URL (e.g., "https://example.com" or "sc-domain:example.com")
+// - isActive: Whether the property has active access (false if access revoked)
+// - Allows tracking which properties are accessible and which need re-authentication
+model GSCProperty {
+  id        String   @id @default(cuid())
+  siteId    String
+  siteUrl   String   // GSC property URL
+  isActive  Boolean  @default(true) // False if access revoked (401/403)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, siteUrl])
+  @@index([siteId, isActive])
+  @@map("gsc_properties")
 }
 
 // Content: Shopify blog posts managed by the platform
@@ -211,8 +265,9 @@ model Page {
   updatedAt      DateTime @updatedAt
 
   // Relations
-  site            Site             @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  contentVersions ContentVersion[]
+  site                Site                 @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  contentVersions     ContentVersion[]
+  performanceSnapshots PerformanceSnapshot[]
 
   @@unique([siteId, shopifyId, type])
   @@index([siteId, type])
@@ -242,4 +297,32 @@ model ContentVersion {
   @@unique([pageId, version])
   @@index([pageId])
   @@map("content_versions")
+}
+
+// PerformanceSnapshot: Stores Google Search Console performance data
+// Why: Track SEO performance metrics (impressions, clicks, position) over time
+// - page_id: Which page this data is for
+// - keyword: The search query/keyword
+// - impressions: Number of times the page appeared in search results
+// - clicks: Number of times users clicked through
+// - position: Average position in search results
+// - date: The date this snapshot was taken
+// - Allows tracking SEO performance trends and keyword rankings
+model PerformanceSnapshot {
+  id         String   @id @default(cuid())
+  pageId     String
+  keyword    String   // Search query/keyword
+  impressions Int     // Number of impressions
+  clicks     Int     // Number of clicks
+  position   Float    // Average position (can be decimal)
+  date       DateTime // Date of the snapshot
+  createdAt  DateTime @default(now())
+
+  // Relations
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, keyword, date])
+  @@index([pageId, date])
+  @@index([date])
+  @@map("performance_snapshots")
 }
