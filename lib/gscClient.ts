@@ -3,6 +3,9 @@ import { prisma } from './prisma'
 import { decryptToken, encryptToken } from './shopify-oauth'
 import { GSCAuthRequiredError, GSCApiError } from './gsc-errors'
 
+// Re-export errors for convenience
+export { GSCAuthRequiredError, GSCApiError } from './gsc-errors'
+
 const GSC_API_BASE = 'https://www.googleapis.com/webmasters/v3'
 
 export interface GSCProperty {
