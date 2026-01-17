@@ -4,10 +4,7 @@ import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { SyncBaselineButton } from "@/components/sync-baseline-button"
 import { DisconnectShopifyButton } from "@/components/disconnect-shopify-button"
-import { SeedKeywordsButton } from "@/components/seed-keywords-button"
-import { KeywordsList } from "@/components/keywords-list"
-import { TestContentGenerate } from "@/components/test-content-generate"
-import { CleanupDuplicatesButton } from "@/components/cleanup-duplicates-button"
+import { ContentGeneration } from "@/components/content-generation"
 
 export default async function DashboardPage({
   searchParams,
@@ -58,9 +55,18 @@ export default async function DashboardPage({
   const site = user.sites[0] // MVP: one site per user
   const hasShopify = !!site?.shopifyAccessToken
 
-  // Get keyword count
-  const keywordCount = site
-    ? await prisma.keyword.count({
+  // Get counts for dashboard
+  const blogPostCount = site
+    ? await prisma.page.count({
+        where: { 
+          siteId: site.id,
+          type: 'ARTICLE',
+        },
+      })
+    : 0
+
+  const autopilotRunCount = site
+    ? await prisma.autopilotRun.count({
         where: { siteId: site.id },
       })
     : 0
@@ -103,106 +109,66 @@ export default async function DashboardPage({
           </div>
         )}
 
-        {/* Shopify Connection Status */}
-        <div className="bg-card p-8 rounded-lg border mb-6">
-          <h2 className="text-xl font-semibold mb-4">Shopify Store</h2>
-          
-          {hasShopify ? (
+        {/* Dashboard Tile */}
+        {hasShopify && (
+          <div className="bg-card p-8 rounded-lg border mb-6">
+            <h2 className="text-xl font-semibold mb-4">Dashboard</h2>
             <div className="space-y-4">
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-green-600 dark:text-green-400">●</span>
-                  <span className="font-medium">Connected</span>
+                  <span className={`${site.isActive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>●</span>
+                  <span className="font-medium">Connected Domain: {site.domain}</span>
                 </div>
-                <div className="pl-6 space-y-1 text-sm text-muted-foreground">
-                  <p><span className="font-medium">Domain:</span> {site.domain}</p>
-                  <p><span className="font-medium">Store URL:</span> {site.shopifyStoreUrl}</p>
+                <div className="pl-6 text-sm text-muted-foreground">
                   <p><span className="font-medium">Status:</span> {site.isActive ? "Active" : "Inactive"}</p>
                 </div>
               </div>
-              <div className="pt-4 border-t space-y-4">
-                <div>
-                  <h3 className="text-sm font-semibold mb-2">Baseline Data Sync</h3>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Sync products, collections, and blog articles from your Shopify store.
-                  </p>
-                  <SyncBaselineButton />
+              <div className="pt-4 border-t">
+                <SyncBaselineButton />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <div className="p-4 bg-muted rounded-md">
+                  <p className="text-sm text-muted-foreground">Blog Posts</p>
+                  <p className="text-2xl font-bold">{blogPostCount}</p>
                 </div>
-                <div className="pt-4 border-t">
-                  <h3 className="text-sm font-semibold mb-2">Keyword Seeding</h3>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Generate SEO keywords for all products and collections using AI.
-                  </p>
-                  <SeedKeywordsButton />
-                </div>
-                <div className="pt-4 border-t">
-                  <h3 className="text-sm font-semibold mb-2">Cleanup Duplicate Keywords</h3>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Remove excess keywords (keeps 2 oldest per page). The seeding logic now prevents duplicates, but this cleans up old ones.
-                  </p>
-                  <CleanupDuplicatesButton />
-                </div>
-                <div className="pt-4 border-t">
-                  <h3 className="text-sm font-semibold mb-2">Disconnect Store</h3>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Disconnect this Shopify store to connect a different one.
-                  </p>
-                  <DisconnectShopifyButton />
+                <div className="p-4 bg-muted rounded-md">
+                  <p className="text-sm text-muted-foreground">Tool Runs</p>
+                  <p className="text-2xl font-bold">{autopilotRunCount}</p>
                 </div>
               </div>
             </div>
-          ) : (
-            <div className="space-y-4">
-              <p className="text-muted-foreground">
-                Connect your Shopify store to get started with SEO automation.
-              </p>
-              <a
-                href="/dashboard/connect-shopify"
-                className="inline-block px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-              >
-                Connect Shopify Store
-              </a>
-            </div>
-          )}
-        </div>
-
-        {/* Additional Dashboard Content */}
-        <div className="bg-card p-8 rounded-lg border mb-6">
-          <h2 className="text-xl font-semibold mb-4">Overview</h2>
-          <p className="text-muted-foreground mb-4">
-            Welcome to your dashboard! {hasShopify ? "Your Shopify store is connected and ready." : "Connect your Shopify store to begin."}
-          </p>
-          {hasShopify && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-              <div className="p-4 bg-muted rounded-md">
-                <p className="text-sm text-muted-foreground">Keywords</p>
-                <p className="text-2xl font-bold">{keywordCount}</p>
-              </div>
-              <div className="p-4 bg-muted rounded-md">
-                <p className="text-sm text-muted-foreground">Blog Posts</p>
-                <p className="text-2xl font-bold">0</p>
-              </div>
-              <div className="p-4 bg-muted rounded-md">
-                <p className="text-sm text-muted-foreground">Autopilot Runs</p>
-                <p className="text-2xl font-bold">0</p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Content Generation Test */}
-        {hasShopify && (
-          <div className="bg-card p-8 rounded-lg border mb-6">
-            <h2 className="text-xl font-semibold mb-4">Content Generation Test</h2>
-            <TestContentGenerate />
           </div>
         )}
 
-        {/* Keywords Section */}
+        {/* Content Generation Tile */}
+        {hasShopify && (
+          <div className="bg-card p-8 rounded-lg border mb-6">
+            <h2 className="text-xl font-semibold mb-4">Content Generation</h2>
+            <ContentGeneration />
+          </div>
+        )}
+
+        {/* Disconnect Shopify Button */}
         {hasShopify && (
           <div className="bg-card p-8 rounded-lg border">
-            <h2 className="text-xl font-semibold mb-4">Keywords</h2>
-            <KeywordsList />
+            <h2 className="text-xl font-semibold mb-4">Settings</h2>
+            <DisconnectShopifyButton />
+          </div>
+        )}
+
+        {/* Connect Shopify if not connected */}
+        {!hasShopify && (
+          <div className="bg-card p-8 rounded-lg border">
+            <h2 className="text-xl font-semibold mb-4">Get Started</h2>
+            <p className="text-muted-foreground mb-4">
+              Connect your Shopify store to get started with SEO automation.
+            </p>
+            <a
+              href="/dashboard/connect-shopify"
+              className="inline-block px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+            >
+              Connect Shopify Store
+            </a>
           </div>
         )}
       </div>
