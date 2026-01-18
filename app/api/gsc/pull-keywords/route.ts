@@ -181,8 +181,8 @@ export async function POST(request: Request) {
             },
           },
           update: {
-            // Update source if it's from GSC
-            source: query.source || 'gsc',
+            // Update source to 'gsc' (all keywords from this endpoint are from GSC)
+            source: 'gsc',
           },
           create: {
             siteId: siteData.site.id,
