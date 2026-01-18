@@ -203,6 +203,9 @@ export async function POST(request: Request) {
     }
 
     // Insert daily aggregates into gsc_keyword_daily (idempotent per day)
+    // Note: Using endDate (today) as the date since fetchGSCQueryData returns aggregated data
+    // The aggregated totals are stored as today's snapshot
+    const snapshotDate = endDate
     let dailyRecordsCreated = 0
     for (const query of topQueries) {
       try {
@@ -211,7 +214,7 @@ export async function POST(request: Request) {
             siteId_keyword_date: {
               siteId: siteData.site.id,
               keyword: query.query,
-              date: query.date,
+              date: snapshotDate,
             },
           },
           update: {
@@ -222,7 +225,7 @@ export async function POST(request: Request) {
           create: {
             siteId: siteData.site.id,
             keyword: query.query,
-            date: query.date,
+            date: snapshotDate,
             impressions: query.impressions,
             clicks: query.clicks,
             position: query.position,
