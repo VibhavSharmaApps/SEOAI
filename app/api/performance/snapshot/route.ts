@@ -128,6 +128,9 @@ export async function POST(request: Request) {
     console.log(`[Performance Snapshot] Mapping ${queryPageData.length} query-page combinations to ${pages.length} pages`)
 
     // Process and store performance data
+    // Note: Using endDate (today) as the date since fetchGSCQueryPageData returns aggregated data
+    // The aggregated totals are stored as today's snapshot
+    const snapshotDate = endDate
     let recordsCreated = 0
     let recordsSkipped = 0
     const unmatchedUrls = new Set<string>()
@@ -150,7 +153,7 @@ export async function POST(request: Request) {
             pageId_keyword_date: {
               pageId: page.id,
               keyword: item.query,
-              date: item.date,
+              date: snapshotDate,
             },
           },
           update: {
@@ -164,7 +167,7 @@ export async function POST(request: Request) {
             impressions: item.impressions,
             clicks: item.clicks,
             position: item.position,
-            date: item.date,
+            date: snapshotDate,
           },
         })
         recordsCreated++
