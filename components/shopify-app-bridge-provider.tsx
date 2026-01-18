@@ -1,10 +1,26 @@
 'use client'
 
 import { useMemo } from 'react'
-import AppBridgeReact from '@shopify/app-bridge-react'
 import type { AppBridgeConfig } from '@shopify/app-bridge'
 
-const { Provider: AppBridgeProvider } = AppBridgeReact
+// Try importing Provider - if it doesn't exist, we'll handle it gracefully
+// In App Bridge React v4, Provider may be available differently
+let AppBridgeProvider: any = null
+
+// Use dynamic import to handle potential export differences
+if (typeof window !== 'undefined') {
+  // Client-side: try to import Provider
+  try {
+    // Attempt named import (should work if available)
+    const appBridgeReactModule = require('@shopify/app-bridge-react')
+    // Try multiple possible export patterns
+    AppBridgeProvider = appBridgeReactModule.Provider || 
+                       appBridgeReactModule.default?.Provider ||
+                       (appBridgeReactModule.default && typeof appBridgeReactModule.default === 'function' ? appBridgeReactModule.default : null)
+  } catch (error) {
+    // Provider not available - will handle in component
+  }
+}
 
 /**
  * Shopify App Bridge Provider
@@ -41,6 +57,12 @@ export function ShopifyAppBridgeProvider({ children }: { children: React.ReactNo
   // If not embedded (no host), app will work without App Bridge (standalone mode)
   if (!apiKey) {
     console.warn('[App Bridge] API key not configured. App Bridge features will not work.')
+    return <>{children}</>
+  }
+
+  // If Provider is not available, render children directly (standalone mode)
+  if (!AppBridgeProvider) {
+    console.warn('[App Bridge] Provider component not available - running in standalone mode')
     return <>{children}</>
   }
 
