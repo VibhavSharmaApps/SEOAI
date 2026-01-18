@@ -1,12 +1,14 @@
 'use client'
 
 import { useState } from 'react'
+import { useAuthenticatedFetch } from '@/lib/use-authenticated-fetch'
 
 export function CleanupDuplicatesButton() {
   const [isLoading, setIsLoading] = useState(false)
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const [dryRun, setDryRun] = useState(true)
+  const fetchWithAuth = useAuthenticatedFetch()
 
   const handleCleanup = async (actuallyDelete: boolean) => {
     setIsLoading(true)
@@ -14,11 +16,10 @@ export function CleanupDuplicatesButton() {
     setResult(null)
 
     try {
-      const response = await fetch(
+      const response = await fetchWithAuth(
         `/api/keywords/cleanup-duplicates?dry_run=${!actuallyDelete}`,
         {
           method: 'POST',
-          credentials: 'include',
         }
       )
 

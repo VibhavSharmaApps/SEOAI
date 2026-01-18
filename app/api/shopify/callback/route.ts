@@ -1,4 +1,3 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { exchangeCodeForToken, encryptToken } from '@/lib/shopify-oauth'
 import { prisma } from '@/lib/prisma'
@@ -7,22 +6,23 @@ import { prisma } from '@/lib/prisma'
  * GET /api/shopify/callback
  * Handles Shopify OAuth callback
  * 
+ * This route is public (no auth required) as it's used during initial app installation
+ * before Shopify session tokens are available.
+ * 
  * Query parameters:
  * - code: Authorization code from Shopify
  * - shop: The Shopify shop domain
- * - state: Base64 encoded state containing userId and shop
+ * - state: Base64 encoded state containing shop
+ * - host: Base64 encoded host parameter (used for embedded app redirect)
+ * - embedded: Optional flag indicating if app should be embedded
  */
 export async function GET(request: Request) {
-  const { userId } = await auth()
-  
-  if (!userId) {
-    return new Response('Unauthorized', { status: 401 })
-  }
-  
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
   const shop = searchParams.get('shop')
   const stateParam = searchParams.get('state')
+  const host = searchParams.get('host') // Base64 encoded host from Shopify
+  const embedded = searchParams.get('embedded') // Optional embedded flag
   
   if (!code || !shop || !stateParam) {
     return new Response('Missing required parameters', { status: 400 })
@@ -32,24 +32,29 @@ export async function GET(request: Request) {
     console.log('[Shopify Callback] Starting callback processing')
     console.log('[Shopify Callback] Parameters:', { code: code ? 'present' : 'missing', shop, state: stateParam ? 'present' : 'missing' })
     
-    // Decode state to get userId and shop
+    // Decode state to get shop
     let state
     try {
       state = JSON.parse(Buffer.from(stateParam, 'base64').toString('utf-8'))
-      console.log('[Shopify Callback] Decoded state:', { userId: state.userId, shop: state.shop })
+      console.log('[Shopify Callback] Decoded state:', { shop: state.shop })
     } catch (e) {
       console.error('[Shopify Callback] Failed to decode state:', e)
       throw new Error('Invalid state parameter format')
     }
     
-    // Verify userId matches (security check)
-    if (state.userId !== userId) {
-      console.error('[Shopify Callback] User ID mismatch:', { stateUserId: state.userId, currentUserId: userId })
+    // Verify shop matches (security check)
+    const normalizedShop = shop.replace(/\.myshopify\.com$/, '') + '.myshopify.com'
+    const normalizedStateShop = state.shop.replace(/\.myshopify\.com$/, '') + '.myshopify.com'
+    if (normalizedShop !== normalizedStateShop) {
+      console.error('[Shopify Callback] Shop mismatch:', { stateShop: normalizedStateShop, callbackShop: normalizedShop })
       return new Response('Invalid state parameter', { status: 400 })
     }
     
+    // IMPORTANT: OAuth token exchange ALWAYS happens - this cannot be skipped
+    // Even if a site exists from a previous install, we must exchange the new
+    // authorization code for a fresh access token from Shopify
     console.log('[Shopify Callback] Exchanging code for token...')
-    // Exchange authorization code for access token
+    // Exchange authorization code for access token (ALWAYS runs, never skipped)
     const tokenData = await exchangeCodeForToken(shop, code)
     console.log('[Shopify Callback] Token exchange successful')
     
@@ -58,22 +63,13 @@ export async function GET(request: Request) {
     const encryptedToken = encryptToken(tokenData.access_token)
     console.log('[Shopify Callback] Token encrypted successfully')
     
-    console.log('[Shopify Callback] Looking up user in database...')
-    // Get or create user in database
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-    })
-    
-    if (!user) {
-      console.error('[Shopify Callback] User not found in database:', userId)
-      return new Response('User not found in database', { status: 404 })
-    }
-    console.log('[Shopify Callback] User found:', user.id)
-    
+    // After token exchange, update or create site record
+    // This handles both new installations and reinstalls correctly
     console.log('[Shopify Callback] Checking for existing site...')
-    // Check if site already exists for this user (MVP: one store per user)
+    // Check if site already exists for this shop (stateless - no user lookup)
+    // NOTE: This check happens AFTER token exchange - OAuth always completes first
     const existingSite = await prisma.site.findFirst({
-      where: { userId: user.id },
+      where: { domain: normalizedShop },
     })
     
     if (existingSite) {
@@ -82,8 +78,8 @@ export async function GET(request: Request) {
       await prisma.site.update({
         where: { id: existingSite.id },
         data: {
-          domain: shop,
-          shopifyStoreUrl: `https://${shop}`,
+          domain: normalizedShop,
+          shopifyStoreUrl: `https://${normalizedShop}`,
           shopifyAccessToken: encryptedToken,
           isActive: true,
         },
@@ -91,33 +87,65 @@ export async function GET(request: Request) {
       console.log('[Shopify Callback] Site updated successfully')
     } else {
       console.log('[Shopify Callback] Creating new site...')
-      // Create new site
+      // Create new site (stateless - no userId required)
+      // Sites are identified by domain, not by user
       await prisma.site.create({
         data: {
-          userId: user.id,
-          domain: shop,
-          shopifyStoreUrl: `https://${shop}`,
+          domain: normalizedShop,
+          shopifyStoreUrl: `https://${normalizedShop}`,
           shopifyAccessToken: encryptedToken,
-          name: shop.replace('.myshopify.com', ''),
+          name: normalizedShop.replace('.myshopify.com', ''),
+          isActive: true,
+          // userId is optional - can be null for stateless operation
         },
       })
       console.log('[Shopify Callback] Site created successfully')
     }
     
-    console.log('[Shopify Callback] Redirecting to dashboard with success...')
-    // Redirect to dashboard on success
-    const baseUrl = new URL(request.url).origin
-    return NextResponse.redirect(`${baseUrl}/dashboard?shopify=connected`)
+    console.log('[Shopify Callback] Preparing redirect to embedded app...')
+    
+    // Get API key for constructing Shopify Admin embedded URL
+    const apiKey = process.env.SHOPIFY_API_KEY
+    if (!apiKey) {
+      throw new Error('SHOPIFY_API_KEY is not set - cannot construct embedded app URL')
+    }
+    
+    // Normalize shop domain (ensure .myshopify.com suffix)
+    const shopDomain = normalizedShop
+    
+    // Construct Shopify Admin embedded app URL
+    // Format: https://{shop}.myshopify.com/admin/apps/{api_key}
+    // This ensures the app loads in Shopify Admin's embedded context
+    const embeddedAppUrl = `https://${shopDomain}/admin/apps/${apiKey}`
+    
+    console.log('[Shopify Callback] Redirecting to Shopify Admin embedded app:', embeddedAppUrl)
+    
+    // Redirect to Shopify Admin embedded app URL
+    // This will load our app's root URL within the embedded iframe context
+    // App Bridge will initialize automatically from the host parameter when present
+    return NextResponse.redirect(embeddedAppUrl)
   } catch (error) {
     console.error('[Shopify Callback] Error details:', {
       message: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
       name: error instanceof Error ? error.name : undefined,
     })
-    const baseUrl = new URL(request.url).origin
+    
+    // On error, still try to redirect to Shopify Admin embedded app
+    // The app can handle error states in the UI
+    const apiKey = process.env.SHOPIFY_API_KEY
+    const shopDomain = shop ? shop.replace(/\.myshopify\.com$/, '') + '.myshopify.com' : 'unknown.myshopify.com'
+    
+    if (apiKey && shopDomain !== 'unknown.myshopify.com') {
+      const embeddedAppUrl = `https://${shopDomain}/admin/apps/${apiKey}`
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      console.error('[Shopify Callback] Redirecting to embedded app with error state:', embeddedAppUrl)
+      // Redirect to embedded app - error can be handled in app UI
+      return NextResponse.redirect(`${embeddedAppUrl}?error=${encodeURIComponent(errorMessage)}`)
+    }
+    
+    // Fallback: return error response if we can't construct embedded URL
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    // Include error message in URL for debugging (will be visible in browser)
-    return NextResponse.redirect(`${baseUrl}/dashboard?shopify=error&msg=${encodeURIComponent(errorMessage)}`)
+    return new Response(`OAuth callback error: ${errorMessage}`, { status: 500 })
   }
 }
-

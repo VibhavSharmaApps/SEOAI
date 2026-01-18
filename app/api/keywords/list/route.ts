@@ -1,36 +1,28 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getSiteFromSession, ShopifySessionTokenError } from '@/lib/get-site-from-session'
 
-// Force dynamic rendering (required for auth and database queries)
+// Force dynamic rendering (required for database queries)
 export const dynamic = 'force-dynamic'
 
 /**
  * GET /api/keywords/list
- * Returns all keywords for the authenticated user's site
+ * Returns all keywords for the authenticated shop's site
  */
 export async function GET(request: Request) {
   try {
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Get user and their site
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      include: { sites: true },
-    })
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
-    }
-
-    const site = user.sites[0]
-
-    if (!site) {
-      return NextResponse.json({ error: 'No Shopify store connected' }, { status: 400 })
+    // Verify Shopify session token and get site
+    let siteData
+    try {
+      siteData = await getSiteFromSession(request)
+    } catch (error) {
+      if (error instanceof ShopifySessionTokenError) {
+        return NextResponse.json(
+          { error: error.message },
+          { status: error.statusCode }
+        )
+      }
+      throw error
     }
 
     // Get query parameters
@@ -40,7 +32,7 @@ export async function GET(request: Request) {
     const offset = parseInt(searchParams.get('offset') || '0')
 
     // Build where clause
-    const where: any = { siteId: site.id }
+    const where: any = { siteId: siteData.site.id }
     if (source) {
       where.source = source
     }
@@ -59,7 +51,7 @@ export async function GET(request: Request) {
     // Group by source for summary
     const bySource = await prisma.keyword.groupBy({
       by: ['source'],
-      where: { siteId: site.id },
+      where: { siteId: siteData.site.id },
       _count: true,
     })
 
@@ -88,4 +80,3 @@ export async function GET(request: Request) {
     )
   }
 }
-

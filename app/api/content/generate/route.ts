@@ -1,11 +1,11 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { generateContent } from '@/lib/openai'
 import { decryptToken } from '@/lib/shopify-oauth'
 import { fetchProductDescription } from '@/lib/shopify-product-details'
+import { getSiteFromSession, ShopifySessionTokenError } from '@/lib/get-site-from-session'
 
-// Force dynamic rendering (required for auth and database queries)
+// Force dynamic rendering (required for database queries)
 export const dynamic = 'force-dynamic'
 
 /**
@@ -19,10 +19,18 @@ export const dynamic = 'force-dynamic'
  */
 export async function POST(request: Request) {
   try {
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // Verify Shopify session token and get site
+    let siteData
+    try {
+      siteData = await getSiteFromSession(request)
+    } catch (error) {
+      if (error instanceof ShopifySessionTokenError) {
+        return NextResponse.json(
+          { error: error.message },
+          { status: error.statusCode }
+        )
+      }
+      throw error
     }
 
     // Parse request body
@@ -45,17 +53,7 @@ export async function POST(request: Request) {
       )
     }
 
-    // Get user and verify ownership
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      include: { sites: true },
-    })
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
-    }
-
-    // Find the page and verify it belongs to the user's site
+    // Find the page and verify it belongs to the site from session token
     const page = await prisma.page.findUnique({
       where: { id: page_id },
       include: { site: true },
@@ -65,11 +63,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Page not found' }, { status: 404 })
     }
 
-    // Verify the page belongs to one of the user's sites
-    const userSiteIds = user.sites.map((s) => s.id)
-    if (!userSiteIds.includes(page.siteId)) {
+    // Verify the page belongs to the site from session token
+    if (page.siteId !== siteData.site.id) {
       return NextResponse.json(
-        { error: 'Unauthorized: Page does not belong to your site' },
+        { error: 'Unauthorized: Page does not belong to your shop' },
         { status: 403 }
       )
     }
@@ -86,10 +83,10 @@ export async function POST(request: Request) {
 
     // Get product description if it's a product (for better context)
     let description: string | undefined
-    if (page.type === 'PRODUCT' && page.site.shopifyAccessToken) {
+    if (page.type === 'PRODUCT') {
       try {
-        const accessToken = decryptToken(page.site.shopifyAccessToken)
-        description = (await fetchProductDescription(page.site.domain, accessToken, page.shopifyId)) || undefined
+        const accessToken = decryptToken(siteData.site.shopifyAccessToken)
+        description = (await fetchProductDescription(siteData.site.domain, accessToken, page.shopifyId)) || undefined
       } catch (error) {
         console.warn(`[Content Generate] Could not fetch product description:`, error)
         // Continue without description
@@ -185,4 +182,3 @@ export async function POST(request: Request) {
     )
   }
 }
-

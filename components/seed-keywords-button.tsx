@@ -1,11 +1,13 @@
 "use client"
 
 import { useState } from "react"
+import { useAuthenticatedFetch } from "@/lib/use-authenticated-fetch"
 
 export function SeedKeywordsButton() {
   const [isLoading, setIsLoading] = useState(false)
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
+  const fetchWithAuth = useAuthenticatedFetch()
 
   const handleSeed = async () => {
     setIsLoading(true)
@@ -13,9 +15,8 @@ export function SeedKeywordsButton() {
     setResult(null)
 
     try {
-      const response = await fetch('/api/keywords/seed', {
+      const response = await fetchWithAuth('/api/keywords/seed', {
         method: 'POST',
-        credentials: 'include',
       })
 
       const data = await response.json()

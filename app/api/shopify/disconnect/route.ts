@@ -1,38 +1,30 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getSiteFromSession, ShopifySessionTokenError } from '@/lib/get-site-from-session'
 
 /**
  * POST /api/shopify/disconnect
  * Disconnects the Shopify store by removing the access token
  */
-export async function POST() {
+export async function POST(request: Request) {
   try {
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Get user and their site
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      include: { sites: true },
-    })
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
-    }
-
-    const site = user.sites[0]
-
-    if (!site) {
-      return NextResponse.json({ error: 'No Shopify store connected' }, { status: 400 })
+    // Verify Shopify session token and get site
+    let siteData
+    try {
+      siteData = await getSiteFromSession(request)
+    } catch (error) {
+      if (error instanceof ShopifySessionTokenError) {
+        return NextResponse.json(
+          { error: error.message },
+          { status: error.statusCode }
+        )
+      }
+      throw error
     }
 
     // Remove the access token (disconnect)
     const updatedSite = await prisma.site.update({
-      where: { id: site.id },
+      where: { id: siteData.site.id },
       data: {
         shopifyAccessToken: null,
         isActive: false,
@@ -60,4 +52,3 @@ export async function POST() {
     )
   }
 }
-

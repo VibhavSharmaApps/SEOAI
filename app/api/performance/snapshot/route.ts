@@ -1,10 +1,10 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { fetchGSCQueryPageData } from '@/lib/google-search-console'
-import { getGSCClient, GSCAuthRequiredError, GSCApiError } from '@/lib/gscClient'
+import { getSiteFromSessionWithGSC, ShopifySessionTokenError } from '@/lib/get-site-from-session-gsc'
+import { GSCAuthRequiredError, GSCApiError } from '@/lib/gsc-errors'
 
-// Force dynamic rendering (required for auth and database queries)
+// Force dynamic rendering (required for database queries)
 export const dynamic = 'force-dynamic'
 
 /**
@@ -22,32 +22,34 @@ export const dynamic = 'force-dynamic'
  */
 export async function POST(request: Request) {
   try {
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Get user and their site
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      include: { sites: true },
-    })
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
-    }
-
-    const site = user.sites[0]
-
-    if (!site) {
-      return NextResponse.json({ error: 'No site connected' }, { status: 400 })
+    // Verify Shopify session token and get site with Google OAuth token
+    let siteData
+    try {
+      siteData = await getSiteFromSessionWithGSC(request, true)
+    } catch (error) {
+      if (error instanceof ShopifySessionTokenError) {
+        return NextResponse.json(
+          { error: error.message },
+          { status: error.statusCode }
+        )
+      }
+      if (error instanceof GSCAuthRequiredError) {
+        return NextResponse.json(
+          {
+            error: 'Google Search Console authentication required',
+            message: error.message,
+            code: 'GSC_AUTH_REQUIRED',
+          },
+          { status: 401 }
+        )
+      }
+      throw error
     }
 
     // Parse optional body parameters
     const body = await request.json().catch(() => ({}))
     const days = body.days || 7
-    const siteUrl = body.site_url || site.shopifyStoreUrl
+    const siteUrl = body.site_url || siteData.site.shopifyStoreUrl
 
     // Calculate date range (last N days)
     const endDate = new Date()
@@ -56,30 +58,16 @@ export async function POST(request: Request) {
 
     console.log(`[Performance Snapshot] Fetching GSC data for ${siteUrl} from ${startDate.toISOString()} to ${endDate.toISOString()}`)
 
-    // Get authenticated GSC client
-    let gscClient
-    try {
-      gscClient = await getGSCClient()
-    } catch (authError) {
-      if (authError instanceof GSCAuthRequiredError) {
-        return NextResponse.json(
-          {
-            error: 'Google Search Console authentication required',
-            message: authError.message,
-            code: 'GSC_AUTH_REQUIRED',
-          },
-          { status: 401 }
-        )
-      }
-      throw authError
-    }
-
     // Fetch query + page data from Google Search Console
     let queryPageData
     try {
+      if (!siteData.googleAccessToken) {
+        throw new GSCAuthRequiredError('Google OAuth token not available')
+      }
+
       queryPageData = await fetchGSCQueryPageData(
         siteUrl,
-        gscClient.accessToken,
+        siteData.googleAccessToken,
         startDate,
         endDate
       )
@@ -120,94 +108,89 @@ export async function POST(request: Request) {
 
     // Get all pages for this site to map URLs
     const pages = await prisma.page.findMany({
-      where: { siteId: site.id },
+      where: { siteId: siteData.site.id },
       select: {
         id: true,
         url: true,
+        shopifyId: true,
         type: true,
       },
     })
 
-    console.log(`[Performance Snapshot] Found ${pages.length} pages in database`)
-
-    // Create a map of URL -> page ID for quick lookup
-    // Normalize URLs for matching (remove trailing slashes, handle http/https)
-    const urlToPageMap = new Map<string, string>()
+    // Create a map of URL -> Page for quick lookup
+    const urlToPageMap = new Map<string, typeof pages[0]>()
     pages.forEach((page) => {
-      const normalizedUrl = normalizeUrl(page.url)
-      urlToPageMap.set(normalizedUrl, page.id)
+      // Normalize URLs for matching (remove trailing slashes, protocols)
+      const normalizedUrl = page.url.replace(/^https?:\/\//, '').replace(/\/$/, '')
+      urlToPageMap.set(normalizedUrl, page)
     })
 
+    console.log(`[Performance Snapshot] Mapping ${queryPageData.length} query-page combinations to ${pages.length} pages`)
+
     // Process and store performance data
-    let storedCount = 0
-    let skippedCount = 0
-    const errors: string[] = []
+    let recordsCreated = 0
+    let recordsSkipped = 0
+    const unmatchedUrls = new Set<string>()
 
-    // Group by date (GSC data is aggregated, but we'll store daily snapshots)
-    // For simplicity, we'll store one snapshot per query-page combination
-    // You may want to aggregate by day if GSC returns daily data
-    for (const data of queryPageData) {
+    for (const item of queryPageData) {
+      // Normalize page URL for matching
+      const normalizedPageUrl = item.page.replace(/^https?:\/\//, '').replace(/\/$/, '')
+      const page = urlToPageMap.get(normalizedPageUrl)
+
+      if (!page) {
+        unmatchedUrls.add(item.page)
+        recordsSkipped++
+        continue
+      }
+
       try {
-        // Normalize the page URL from GSC
-        const normalizedGscUrl = normalizeUrl(data.page)
-        
-        // Find matching page in our database
-        const pageId = urlToPageMap.get(normalizedGscUrl)
-
-        if (!pageId) {
-          skippedCount++
-          console.log(`[Performance Snapshot] No matching page found for URL: ${data.page}`)
-          continue
-        }
-
-        // Store performance snapshot
-        // Using upsert to handle duplicates (same page, keyword, date)
+        // Upsert performance snapshot (idempotent per day)
         await prisma.performanceSnapshot.upsert({
           where: {
             pageId_keyword_date: {
-              pageId,
-              keyword: data.query,
-              date: endDate, // Use end date as snapshot date (or you could use startDate)
+              pageId: page.id,
+              keyword: item.query,
+              date: item.date,
             },
           },
           update: {
-            impressions: data.impressions,
-            clicks: data.clicks,
-            position: data.position,
+            impressions: item.impressions,
+            clicks: item.clicks,
+            position: item.position,
           },
           create: {
-            pageId,
-            keyword: data.query,
-            impressions: data.impressions,
-            clicks: data.clicks,
-            position: data.position,
-            date: endDate,
+            pageId: page.id,
+            keyword: item.query,
+            impressions: item.impressions,
+            clicks: item.clicks,
+            position: item.position,
+            date: item.date,
           },
         })
-
-        storedCount++
+        recordsCreated++
       } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-        errors.push(`Failed to store ${data.query} -> ${data.page}: ${errorMsg}`)
-        console.error(`[Performance Snapshot] Error storing data:`, error)
+        console.error(`[Performance Snapshot] Error storing snapshot for page ${page.id}, keyword "${item.query}":`, error)
+        recordsSkipped++
+        // Continue with next record
       }
     }
 
-    console.log(`[Performance Snapshot] Complete. Stored: ${storedCount}, Skipped: ${skippedCount}`)
+    console.log(`[Performance Snapshot] Complete. Created ${recordsCreated} records, skipped ${recordsSkipped} (${unmatchedUrls.size} unique unmatched URLs)`)
 
     return NextResponse.json({
       success: true,
       message: 'Performance snapshot created successfully',
       summary: {
-        totalGSCRecords: queryPageData.length,
-        stored: storedCount,
-        skipped: skippedCount,
+        queriesFetched: queryPageData.length,
+        pagesMatched: recordsCreated,
+        recordsSkipped,
+        unmatchedUrlsCount: unmatchedUrls.size,
         dateRange: {
           start: startDate.toISOString(),
           end: endDate.toISOString(),
         },
       },
-      errors: errors.length > 0 ? errors : undefined,
+      unmatchedUrls: Array.from(unmatchedUrls).slice(0, 10), // Return first 10 for debugging
     })
   } catch (error) {
     console.error('[Performance Snapshot] Error:', error)
@@ -220,31 +203,3 @@ export async function POST(request: Request) {
     )
   }
 }
-
-/**
- * Normalizes URLs for matching
- * - Removes trailing slashes
- * - Normalizes http/https
- * - Removes www (optional)
- */
-function normalizeUrl(url: string): string {
-  try {
-    // Parse URL to handle different formats
-    let normalized = url.trim()
-    
-    // Remove trailing slash
-    normalized = normalized.replace(/\/$/, '')
-    
-    // Normalize protocol (convert http to https for matching)
-    normalized = normalized.replace(/^http:\/\//, 'https://')
-    
-    // Remove www (optional - you may want to keep this)
-    // normalized = normalized.replace(/^https?:\/\/www\./, 'https://')
-    
-    return normalized.toLowerCase()
-  } catch {
-    // If URL parsing fails, return as-is
-    return url.toLowerCase()
-  }
-}
-

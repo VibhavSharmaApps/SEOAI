@@ -1,6 +1,16 @@
+/**
+ * @deprecated This file uses Clerk authentication and is no longer used.
+ * 
+ * All GSC routes now use `getSiteFromSessionWithGSC()` from `lib/get-site-from-session-gsc.ts`
+ * which uses Shopify session tokens instead of Clerk.
+ * 
+ * This file is kept for reference but should not be used in new code.
+ * Functions here can be refactored to accept a site parameter instead of using Clerk.
+ */
+
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from './prisma'
-import { decryptToken, encryptToken } from './shopify-oauth'
+import { decryptToken } from './shopify-oauth'
 import { GSCAuthRequiredError, GSCApiError } from './gsc-errors'
 
 // Re-export errors for convenience
@@ -14,6 +24,7 @@ export interface GSCProperty {
 }
 
 /**
+ * @deprecated Use getSiteFromSessionWithGSC() instead
  * Gets the authenticated Google OAuth token for the current user's site
  * Throws GSCAuthRequiredError if token is missing or expired
  */
@@ -61,6 +72,7 @@ async function getGoogleOAuthToken(): Promise<string> {
 }
 
 /**
+ * @deprecated Use getSiteFromSessionWithGSC() instead
  * Makes an authenticated request to Google Search Console API
  */
 async function gscRequest(
@@ -112,6 +124,7 @@ async function gscRequest(
 }
 
 /**
+ * @deprecated Refactor to accept site parameter instead of using Clerk
  * Lists all verified Google Search Console properties for the authenticated user
  * Returns array of site URLs that the user has access to
  */
@@ -140,6 +153,7 @@ export async function listGSCProperties(): Promise<GSCProperty[]> {
 }
 
 /**
+ * @deprecated Refactor to accept site parameter instead of using Clerk
  * Verifies if a site URL is accessible in Google Search Console
  */
 export async function verifyGSCProperty(siteUrl: string): Promise<boolean> {
@@ -155,6 +169,7 @@ export async function verifyGSCProperty(siteUrl: string): Promise<boolean> {
 }
 
 /**
+ * @deprecated Use getSiteFromSessionWithGSC() instead
  * Gets the authenticated GSC client instance
  * This is a convenience function that returns the access token
  */
@@ -162,4 +177,3 @@ export async function getGSCClient(): Promise<{ accessToken: string }> {
   const accessToken = await getGoogleOAuthToken()
   return { accessToken }
 }
-

@@ -1,11 +1,13 @@
 "use client"
 
 import { useState } from "react"
+import { useAuthenticatedFetch } from "@/lib/use-authenticated-fetch"
 
 export function SyncBaselineButton() {
   const [isLoading, setIsLoading] = useState(false)
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
+  const fetchWithAuth = useAuthenticatedFetch()
 
   const handleSync = async () => {
     setIsLoading(true)
@@ -13,9 +15,8 @@ export function SyncBaselineButton() {
     setResult(null)
 
     try {
-      const response = await fetch('/api/store/baseline', {
+      const response = await fetchWithAuth('/api/store/baseline', {
         method: 'POST',
-        credentials: 'include',
       })
 
       const data = await response.json()
@@ -41,7 +42,7 @@ export function SyncBaselineButton() {
         disabled={isLoading}
         className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {isLoading ? 'Syncing...' : 'Sync Baseline Data'}
+        {isLoading ? 'Syncing...' : 'Sync Store Content'}
       </button>
 
       {error && (

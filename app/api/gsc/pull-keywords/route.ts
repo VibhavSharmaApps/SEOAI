@@ -1,10 +1,10 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getGSCClient, GSCAuthRequiredError, GSCApiError } from '@/lib/gscClient'
+import { getSiteFromSessionWithGSC, ShopifySessionTokenError } from '@/lib/get-site-from-session-gsc'
 import { fetchGSCQueryData } from '@/lib/google-search-console'
+import { GSCAuthRequiredError, GSCApiError } from '@/lib/gsc-errors'
 
-// Force dynamic rendering (required for auth and database queries)
+// Force dynamic rendering (required for database queries)
 export const dynamic = 'force-dynamic'
 
 /**
@@ -19,26 +19,28 @@ export const dynamic = 'force-dynamic'
  */
 export async function POST(request: Request) {
   try {
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Get user and their site
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      include: { sites: true },
-    })
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
-    }
-
-    const site = user.sites[0]
-
-    if (!site) {
-      return NextResponse.json({ error: 'No site connected' }, { status: 400 })
+    // Verify Shopify session token and get site with Google OAuth token
+    let siteData
+    try {
+      siteData = await getSiteFromSessionWithGSC(request, true)
+    } catch (error) {
+      if (error instanceof ShopifySessionTokenError) {
+        return NextResponse.json(
+          { error: error.message },
+          { status: error.statusCode }
+        )
+      }
+      if (error instanceof GSCAuthRequiredError) {
+        return NextResponse.json(
+          {
+            error: 'Google Search Console authentication required',
+            message: error.message,
+            code: 'GSC_AUTH_REQUIRED',
+          },
+          { status: 401 }
+        )
+      }
+      throw error
     }
 
     // Parse optional body parameters
@@ -46,7 +48,7 @@ export async function POST(request: Request) {
     const days = body.days || 28
     const minImpressions = body.min_impressions || 10
     const limit = body.limit || 100
-    const siteUrl = body.site_url || site.shopifyStoreUrl
+    const siteUrl = body.site_url || siteData.site.shopifyStoreUrl
 
     // Calculate date range (last N days)
     const endDate = new Date()
@@ -55,35 +57,17 @@ export async function POST(request: Request) {
 
     console.log(`[GSC Pull Keywords] Fetching data for ${siteUrl} from ${startDate.toISOString()} to ${endDate.toISOString()}`)
 
-    // Get authenticated GSC client
-    let gscClient
-    try {
-      gscClient = await getGSCClient()
-    } catch (authError) {
-      if (authError instanceof GSCAuthRequiredError) {
-        return NextResponse.json(
-          {
-            error: 'Google Search Console authentication required',
-            message: authError.message,
-            code: 'GSC_AUTH_REQUIRED',
-          },
-          { status: 401 }
-        )
-      }
-      throw authError
-    }
-
     // Ensure GSC property exists in database
     await prisma.gSCProperty.upsert({
       where: {
         siteId_siteUrl: {
-          siteId: site.id,
+          siteId: siteData.site.id,
           siteUrl: siteUrl,
         },
       },
       update: {},
       create: {
-        siteId: site.id,
+        siteId: siteData.site.id,
         siteUrl: siteUrl,
         isActive: true,
       },
@@ -92,9 +76,13 @@ export async function POST(request: Request) {
     // Fetch query-level data from Google Search Console
     let queryData
     try {
+      if (!siteData.googleAccessToken) {
+        throw new GSCAuthRequiredError('Google OAuth token not available')
+      }
+
       queryData = await fetchGSCQueryData(
         siteUrl,
-        gscClient.accessToken,
+        siteData.googleAccessToken,
         startDate,
         endDate
       )
@@ -104,7 +92,7 @@ export async function POST(request: Request) {
       await prisma.gSCProperty.update({
         where: {
           siteId_siteUrl: {
-            siteId: site.id,
+            siteId: siteData.site.id,
             siteUrl: siteUrl,
           },
         },
@@ -117,15 +105,14 @@ export async function POST(request: Request) {
       
       // Check if it's a 401 or 403 error (access revoked)
       const isAccessRevoked = 
-        (gscError instanceof GSCApiError && (gscError.statusCode === 401 || gscError.statusCode === 403)) ||
-        (gscError instanceof Error && (gscError.message.includes('401') || gscError.message.includes('403')))
+        (gscError instanceof GSCApiError && (gscError.statusCode === 401 || gscError.statusCode === 403))
       
       if (isAccessRevoked) {
         // Mark property as inactive
         await prisma.gSCProperty.update({
           where: {
             siteId_siteUrl: {
-              siteId: site.id,
+              siteId: siteData.site.id,
               siteUrl: siteUrl,
             },
           },
@@ -133,9 +120,7 @@ export async function POST(request: Request) {
             isActive: false,
           },
         })
-        
-        console.log(`[GSC Pull Keywords] Marked property ${siteUrl} as inactive due to access revocation`)
-        
+
         return NextResponse.json(
           {
             error: 'GSC access revoked',
@@ -146,7 +131,7 @@ export async function POST(request: Request) {
           { status: 409 }
         )
       }
-      
+
       if (gscError instanceof GSCAuthRequiredError) {
         return NextResponse.json(
           {
@@ -157,7 +142,7 @@ export async function POST(request: Request) {
           { status: 401 }
         )
       }
-      
+
       if (gscError instanceof GSCApiError) {
         return NextResponse.json(
           {
@@ -168,75 +153,76 @@ export async function POST(request: Request) {
           { status: gscError.statusCode || 500 }
         )
       }
-      
-      return NextResponse.json(
-        {
-          error: 'Failed to fetch data from Google Search Console',
-          message: gscError instanceof Error ? gscError.message : 'Unknown error',
-        },
-        { status: 500 }
-      )
+
+      throw gscError
     }
 
-    // Filter and sort queries
-    const filteredQueries = queryData
-      .filter((q) => q.impressions >= minImpressions) // Filter by minimum impressions
-      .sort((a, b) => b.impressions - a.impressions) // Sort by impressions desc
-      .slice(0, limit) // Limit to top N
+    // Filter queries by minimum impressions
+    const filteredQueries = queryData.filter((q) => q.impressions >= minImpressions)
 
-    console.log(`[GSC Pull Keywords] Processing ${filteredQueries.length} keywords (filtered from ${queryData.length})`)
+    // Sort by impressions descending and limit
+    const topQueries = filteredQueries
+      .sort((a, b) => b.impressions - a.impressions)
+      .slice(0, limit)
 
-    // Process each query
-    let keywordsUpserted = 0
-    let dailyRecordsCreated = 0
-    const errors: string[] = []
+    console.log(`[GSC Pull Keywords] Processing ${topQueries.length} queries (filtered from ${queryData.length} total)`)
 
-    // Get today's date (for idempotency - same day = same data)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0) // Set to start of day
+    // Upsert keywords (idempotent - won't create duplicates)
+    let keywordsCreated = 0
+    let keywordsSkipped = 0
 
-    for (const query of filteredQueries) {
+    for (const query of topQueries) {
       try {
-        // Upsert keyword into keywords table
         await prisma.keyword.upsert({
           where: {
             siteId_keyword: {
-              siteId: site.id,
+              siteId: siteData.site.id,
               keyword: query.query,
             },
           },
           update: {
-            // Update if exists (but keep other fields)
-            updatedAt: new Date(),
+            // Update source if it's from GSC
+            source: query.source || 'gsc',
           },
           create: {
-            siteId: site.id,
+            siteId: siteData.site.id,
             keyword: query.query,
             source: 'gsc',
           },
         })
-        keywordsUpserted++
+        keywordsCreated++
+      } catch (error: any) {
+        if (error.code === 'P2002') {
+          // Unique constraint violation - keyword already exists
+          keywordsSkipped++
+          continue
+        }
+        console.error(`[GSC Pull Keywords] Error upserting keyword "${query.query}":`, error)
+        // Continue with next keyword
+      }
+    }
 
-        // Insert daily aggregate (idempotent per day)
-        // Using upsert to ensure idempotency - same keyword + date = update, not duplicate
+    // Insert daily aggregates into gsc_keyword_daily (idempotent per day)
+    let dailyRecordsCreated = 0
+    for (const query of topQueries) {
+      try {
         await prisma.gSCKeywordDaily.upsert({
           where: {
             siteId_keyword_date: {
-              siteId: site.id,
+              siteId: siteData.site.id,
               keyword: query.query,
-              date: today, // Use today's date for the snapshot
+              date: query.date,
             },
           },
           update: {
-            // Update if already exists for today
             impressions: query.impressions,
             clicks: query.clicks,
             position: query.position,
           },
           create: {
-            siteId: site.id,
+            siteId: siteData.site.id,
             keyword: query.query,
-            date: today,
+            date: query.date,
             impressions: query.impressions,
             clicks: query.clicks,
             position: query.position,
@@ -244,43 +230,33 @@ export async function POST(request: Request) {
         })
         dailyRecordsCreated++
       } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-        errors.push(`Failed to process "${query.query}": ${errorMsg}`)
-        console.error(`[GSC Pull Keywords] Error processing keyword "${query.query}":`, error)
+        console.error(`[GSC Pull Keywords] Error upserting daily record for "${query.query}":`, error)
+        // Continue with next query
       }
     }
 
-    console.log(`[GSC Pull Keywords] Complete. Keywords upserted: ${keywordsUpserted}, Daily records: ${dailyRecordsCreated}`)
+    console.log(`[GSC Pull Keywords] Complete. Keywords: ${keywordsCreated} created, ${keywordsSkipped} skipped. Daily records: ${dailyRecordsCreated} created/updated.`)
 
     return NextResponse.json({
       success: true,
-      message: 'Keywords pulled successfully',
+      message: 'GSC keywords pulled successfully',
       summary: {
-        totalQueriesFetched: queryData.length,
+        queriesFetched: queryData.length,
         queriesFiltered: filteredQueries.length,
-        keywordsUpserted,
+        queriesProcessed: topQueries.length,
+        keywordsCreated,
+        keywordsSkipped,
         dailyRecordsCreated,
-        dateRange: {
-          start: startDate.toISOString(),
-          end: endDate.toISOString(),
-        },
-        snapshotDate: today.toISOString(),
-        filters: {
-          minImpressions,
-          limit,
-        },
       },
-      errors: errors.length > 0 ? errors : undefined,
     })
   } catch (error) {
     console.error('[GSC Pull Keywords] Error:', error)
     return NextResponse.json(
       {
-        error: 'Failed to pull keywords',
+        error: 'Failed to pull GSC keywords',
         message: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 }
     )
   }
 }
-

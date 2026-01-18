@@ -2,12 +2,14 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useAuthenticatedFetch } from "@/lib/use-authenticated-fetch"
 
 export function DisconnectShopifyButton() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const router = useRouter()
+  const fetchWithAuth = useAuthenticatedFetch()
 
   const handleDisconnect = async () => {
     if (!confirm('Are you sure you want to disconnect your Shopify store? You will need to reconnect to use Shopify features.')) {
@@ -19,9 +21,8 @@ export function DisconnectShopifyButton() {
     setSuccess(false)
 
     try {
-      const response = await fetch('/api/shopify/disconnect', {
+      const response = await fetchWithAuth('/api/shopify/disconnect', {
         method: 'POST',
-        credentials: 'include',
       })
 
       const data = await response.json()

@@ -1,12 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useAuthenticatedFetch } from "@/lib/use-authenticated-fetch"
 
 export function KeywordsList() {
   const [keywords, setKeywords] = useState<any[]>([])
   const [summary, setSummary] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const fetchWithAuth = useAuthenticatedFetch()
 
   useEffect(() => {
     fetchKeywords()
@@ -17,9 +19,7 @@ export function KeywordsList() {
     setError(null)
 
     try {
-      const response = await fetch('/api/keywords/list?limit=50', {
-        credentials: 'include',
-      })
+      const response = await fetchWithAuth('/api/keywords/list?limit=50')
 
       const data = await response.json()
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useAuthenticatedFetch } from '@/lib/use-authenticated-fetch'
 
 interface BlogPost {
   id: string
@@ -36,6 +37,7 @@ export function ContentGeneration() {
   const [publishing, setPublishing] = useState(false)
   const [keywordError, setKeywordError] = useState<string>('')
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null)
+  const fetchWithAuth = useAuthenticatedFetch()
 
   // Fetch blog posts on mount
   useEffect(() => {
@@ -45,9 +47,7 @@ export function ContentGeneration() {
   const fetchBlogPosts = async () => {
     try {
       setLoadingPosts(true)
-      const response = await fetch('/api/pages/list?type=ARTICLE', {
-        credentials: 'include',
-      })
+      const response = await fetchWithAuth('/api/pages/list?type=ARTICLE')
       const data = await response.json()
       if (data.success && data.pages) {
         setBlogPosts(data.pages)
@@ -82,9 +82,8 @@ export function ContentGeneration() {
 
       // Get keywords for this blog post
       const sourcePattern = `article:${selectedPost.shopifyId}`
-      const keywordsResponse = await fetch(
-        `/api/keywords/list?source=${encodeURIComponent(sourcePattern)}`,
-        { credentials: 'include' }
+      const keywordsResponse = await fetchWithAuth(
+        `/api/keywords/list?source=${encodeURIComponent(sourcePattern)}`
       )
       const keywordsData = await keywordsResponse.json()
 
@@ -94,17 +93,15 @@ export function ContentGeneration() {
         setKeywords(existingKeywords)
       } else {
         // Generate keywords using seed endpoint
-        const seedResponse = await fetch('/api/keywords/seed', {
+        const seedResponse = await fetchWithAuth('/api/keywords/seed', {
           method: 'POST',
-          credentials: 'include',
         })
         const seedData = await seedResponse.json()
 
         if (seedResponse.ok && seedData.success) {
           // Fetch keywords again after seeding
-          const updatedKeywordsResponse = await fetch(
-            `/api/keywords/list?source=${encodeURIComponent(sourcePattern)}`,
-            { credentials: 'include' }
+          const updatedKeywordsResponse = await fetchWithAuth(
+            `/api/keywords/list?source=${encodeURIComponent(sourcePattern)}`
           )
           const updatedKeywordsData = await updatedKeywordsResponse.json()
 
@@ -148,12 +145,11 @@ export function ContentGeneration() {
       }
 
       // Generate content first (using first keyword)
-      const generateResponse = await fetch('/api/content/generate', {
+      const generateResponse = await fetchWithAuth('/api/content/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
         body: JSON.stringify({
           page_id: selectedPostId,
           primary_keyword: keywords[0],
@@ -172,12 +168,11 @@ export function ContentGeneration() {
       }
 
       // Publish to Shopify
-      const publishResponse = await fetch('/api/content/publish', {
+      const publishResponse = await fetchWithAuth('/api/content/publish', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
         body: JSON.stringify({
           page_id: selectedPostId,
         }),

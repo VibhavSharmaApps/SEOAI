@@ -1,10 +1,10 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { decryptToken } from '@/lib/shopify-oauth'
 import { updateProductDescription, updateArticleBody, getBlogIdForArticle } from '@/lib/shopify-publish'
+import { getSiteFromSession, ShopifySessionTokenError } from '@/lib/get-site-from-session'
 
-// Force dynamic rendering (required for auth and database queries)
+// Force dynamic rendering (required for database queries)
 export const dynamic = 'force-dynamic'
 
 /**
@@ -16,10 +16,18 @@ export const dynamic = 'force-dynamic'
  */
 export async function POST(request: Request) {
   try {
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // Verify Shopify session token and get site
+    let siteData
+    try {
+      siteData = await getSiteFromSession(request)
+    } catch (error) {
+      if (error instanceof ShopifySessionTokenError) {
+        return NextResponse.json(
+          { error: error.message },
+          { status: error.statusCode }
+        )
+      }
+      throw error
     }
 
     // Parse request body
@@ -34,17 +42,7 @@ export async function POST(request: Request) {
       )
     }
 
-    // Get user and verify ownership
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      include: { sites: true },
-    })
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
-    }
-
-    // Find the page and verify it belongs to the user's site
+    // Find the page and verify it belongs to the site from session token
     const page = await prisma.page.findUnique({
       where: { id: page_id },
       include: { 
@@ -60,11 +58,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Page not found' }, { status: 404 })
     }
 
-    // Verify the page belongs to one of the user's sites
-    const userSiteIds = user.sites.map((s) => s.id)
-    if (!userSiteIds.includes(page.siteId)) {
+    // Verify the page belongs to the site from session token
+    if (page.siteId !== siteData.site.id) {
       return NextResponse.json(
-        { error: 'Unauthorized: Page does not belong to your site' },
+        { error: 'Unauthorized: Page does not belong to your shop' },
         { status: 403 }
       )
     }
@@ -90,17 +87,9 @@ export async function POST(request: Request) {
       )
     }
 
-    // Verify Shopify access token exists
-    if (!page.site.shopifyAccessToken) {
-      return NextResponse.json(
-        { error: 'Shopify access token not found' },
-        { status: 400 }
-      )
-    }
-
     // Decrypt access token
-    const accessToken = decryptToken(page.site.shopifyAccessToken)
-    const shop = page.site.domain
+    const accessToken = decryptToken(siteData.site.shopifyAccessToken)
+    const shop = siteData.site.domain
 
     console.log(`[Content Publish] Publishing version ${latestVersion.version} for ${page.type} page: "${page.title}"`)
 
@@ -208,4 +197,3 @@ export async function POST(request: Request) {
     )
   }
 }
-

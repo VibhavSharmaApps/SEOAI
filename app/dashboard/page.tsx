@@ -112,7 +112,7 @@ export default async function DashboardPage({
         {/* Dashboard Tile */}
         {hasShopify && (
           <div className="bg-card p-8 rounded-lg border mb-6">
-            <h2 className="text-xl font-semibold mb-4">Dashboard</h2>
+            <h2 className="text-xl font-semibold mb-4">Console</h2>
             <div className="space-y-4">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -159,16 +159,25 @@ export default async function DashboardPage({
         {/* Connect Shopify if not connected */}
         {!hasShopify && (
           <div className="bg-card p-8 rounded-lg border">
-            <h2 className="text-xl font-semibold mb-4">Get Started</h2>
+            <h2 className="text-xl font-semibold mb-4">Install from Shopify</h2>
             <p className="text-muted-foreground mb-4">
-              Connect your Shopify store to get started with SEO automation.
+              This app must be installed from the Shopify App Store or Partners dashboard.
+              Installation cannot be initiated from this page.
             </p>
-            <a
-              href="/dashboard/connect-shopify"
-              className="inline-block px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-            >
-              Connect Shopify Store
-            </a>
+            <div className="space-y-3">
+              <div className="p-4 bg-muted rounded-md">
+                <p className="text-sm font-medium mb-2">To install this app:</p>
+                <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
+                  <li>Go to Shopify App Store or Partners dashboard</li>
+                  <li>Find this app and click "Install" or "Get"</li>
+                  <li>Follow Shopify's installation flow</li>
+                  <li>You'll be redirected back here after installation</li>
+                </ol>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                <strong>Note:</strong> Installation must be initiated from Shopify-owned surfaces for security and compliance.
+              </p>
+            </div>
           </div>
         )}
       </div>

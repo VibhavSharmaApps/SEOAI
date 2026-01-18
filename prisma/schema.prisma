@@ -70,7 +70,7 @@ model User {
 // - All SEO entities (Keywords, Content, Prompts, Runs) belong to a Site
 model Site {
   id                    String   @id @default(cuid())
-  userId                String
+  userId                String? // Optional for stateless operation (sites can exist without users)
   type                  SiteType @default(SHOPIFY)
   domain                String
   shopifyStoreUrl       String
@@ -83,7 +83,7 @@ model Site {
   updatedAt             DateTime @updatedAt
 
   // Relations
-  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
   keywords        Keyword[]
   content         Content[]
   prompts         Prompt[]
@@ -92,7 +92,8 @@ model Site {
   gscKeywordDaily GSCKeywordDaily[]
   gscProperties   GSCProperty[]
 
-  @@unique([userId, domain])
+  @@unique([domain]) // Domain is unique (one site per shop domain)
+  @@index([userId]) // Index for user lookups (when userId is present)
   @@map("sites")
 }
 

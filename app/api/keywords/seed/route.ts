@@ -1,58 +1,43 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { decryptToken } from '@/lib/shopify-oauth'
 import { fetchProductDescription } from '@/lib/shopify-product-details'
 import { generateKeywords } from '@/lib/openai'
+import { getSiteFromSession, ShopifySessionTokenError } from '@/lib/get-site-from-session'
 
-// Force dynamic rendering (required for auth and database queries)
+// Force dynamic rendering (required for database queries)
 export const dynamic = 'force-dynamic'
 
 /**
  * POST /api/keywords/seed
  * Generates and seeds keywords for all product and collection pages
  */
-export async function POST() {
+export async function POST(request: Request) {
   try {
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Get user and their site
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      include: { sites: true },
-    })
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
-    }
-
-    const site = user.sites[0]
-
-    if (!site) {
-      return NextResponse.json({ error: 'No Shopify store connected' }, { status: 400 })
-    }
-
-    if (!site.shopifyAccessToken) {
-      return NextResponse.json(
-        { error: 'Shopify access token not found' },
-        { status: 400 }
-      )
+    // Verify Shopify session token and get site
+    let siteData
+    try {
+      siteData = await getSiteFromSession(request)
+    } catch (error) {
+      if (error instanceof ShopifySessionTokenError) {
+        return NextResponse.json(
+          { error: error.message },
+          { status: error.statusCode }
+        )
+      }
+      throw error
     }
 
     // Decrypt access token
-    const accessToken = decryptToken(site.shopifyAccessToken)
-    const shop = site.domain
+    const accessToken = decryptToken(siteData.site.shopifyAccessToken)
+    const shop = siteData.site.domain
 
     console.log(`[Keywords Seed] Starting keyword generation for shop: ${shop}`)
 
     // Fetch all product, collection, and article pages
     const pages = await prisma.page.findMany({
       where: {
-        siteId: site.id,
+        siteId: siteData.site.id,
         type: {
           in: ['PRODUCT', 'COLLECTION', 'ARTICLE'],
         },
@@ -105,7 +90,7 @@ export async function POST() {
         const source = `${page.type.toLowerCase()}:${page.shopifyId}`
         const existingKeywordsCount = await prisma.keyword.count({
           where: {
-            siteId: site.id,
+            siteId: siteData.site.id,
             source,
           },
         })
@@ -144,7 +129,7 @@ export async function POST() {
           try {
             await prisma.keyword.create({
               data: {
-                siteId: site.id,
+                siteId: siteData.site.id,
                 keyword: trimmed,
                 source,
               },
@@ -196,7 +181,7 @@ export async function POST() {
 
     // Check if keywords already exist in database
     const existingKeywordCount = await prisma.keyword.count({
-      where: { siteId: site.id },
+      where: { siteId: siteData.site.id },
     })
 
     return NextResponse.json({
@@ -219,4 +204,3 @@ export async function POST() {
     )
   }
 }
-
