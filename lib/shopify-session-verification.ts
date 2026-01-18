@@ -5,13 +5,10 @@
  * Production-safe implementation using Shopify's official JWT verification
  */
 
-import { shopifyApi, InvalidJwtError } from '@shopify/shopify-api'
+import { shopifyApi, InvalidJwtError, ApiVersion } from '@shopify/shopify-api'
 
 const SHOPIFY_API_KEY = process.env.SHOPIFY_API_KEY
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET
-
-// Use latest stable API version (2024-10 as of early 2025)
-const API_VERSION = '2024-10'
 
 if (!SHOPIFY_API_KEY || !SHOPIFY_API_SECRET) {
   if (process.env.NODE_ENV === 'production') {
@@ -20,19 +17,31 @@ if (!SHOPIFY_API_KEY || !SHOPIFY_API_SECRET) {
   console.warn('⚠️  SHOPIFY_API_KEY or SHOPIFY_API_SECRET not set. Session token verification will fail.')
 }
 
-// Initialize Shopify API instance for token verification
-// Only initialize if credentials are available
+// Lazy initialization of Shopify API instance
+// Only initialize when needed (at runtime), not during build
 let shopify: ReturnType<typeof shopifyApi> | null = null
 
-if (SHOPIFY_API_KEY && SHOPIFY_API_SECRET) {
-  shopify = shopifyApi({
-    apiKey: SHOPIFY_API_KEY,
-    apiSecretKey: SHOPIFY_API_SECRET,
-    scopes: [], // Not needed for token verification
-    hostName: process.env.NEXT_PUBLIC_APP_URL?.replace(/^https?:\/\//, '').split('/')[0] || 'localhost',
-    apiVersion: API_VERSION,
-    isEmbeddedApp: true, // Required for session token verification
-  })
+/**
+ * Gets or initializes the Shopify API instance for token verification
+ * Lazy initialization prevents build-time errors from missing runtime adapters
+ */
+function getShopifyInstance(): ReturnType<typeof shopifyApi> {
+  if (!shopify) {
+    if (!SHOPIFY_API_KEY || !SHOPIFY_API_SECRET) {
+      throw new Error('SHOPIFY_API_KEY and SHOPIFY_API_SECRET must be set for session token verification')
+    }
+    
+    shopify = shopifyApi({
+      apiKey: SHOPIFY_API_KEY,
+      apiSecretKey: SHOPIFY_API_SECRET,
+      scopes: [], // Not needed for token verification
+      hostName: process.env.NEXT_PUBLIC_APP_URL?.replace(/^https?:\/\//, '').split('/')[0] || 'localhost',
+      apiVersion: ApiVersion.October24, // Use enum value for 2024-10 API version
+      isEmbeddedApp: true, // Required for session token verification
+    })
+  }
+  
+  return shopify
 }
 
 export interface ShopifySessionInfo {
@@ -90,12 +99,8 @@ export async function verifyShopifySessionToken(
 
   console.log(`${logPrefix} ✓ Token extracted (length: ${token.length})`)
 
-  if (!shopify) {
-    throw new ShopifySessionTokenError(
-      'Shopify API not initialized. SHOPIFY_API_KEY and SHOPIFY_API_SECRET must be set.',
-      500
-    )
-  }
+  // Get Shopify API instance (lazy initialization - only when needed at runtime)
+  const shopifyInstance = getShopifyInstance()
 
   try {
     console.log(`${logPrefix} Verifying JWT signature, expiration, issuer, audience...`)
@@ -107,7 +112,7 @@ export async function verifyShopifySessionToken(
     // - Issuer (iss claim)
     // - Audience (aud claim - must match SHOPIFY_API_KEY)
     // - Shop domain (dest claim)
-    const decoded = await shopify.session.decodeSessionToken(token)
+    const decoded = await shopifyInstance.session.decodeSessionToken(token)
 
     console.log(`${logPrefix} ✓ JWT signature valid`)
 

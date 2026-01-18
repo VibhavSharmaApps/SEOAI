@@ -26,7 +26,9 @@ export function useAuthenticatedFetch() {
       try {
         if (app) {
           // Use App Bridge utility to get session token
-          sessionToken = await getSessionToken(app)
+          // Type cast needed because useAppBridge() returns ShopifyGlobal but getSessionToken expects ClientApplication
+          // This is a known type mismatch in @shopify/app-bridge-react v4.x
+          sessionToken = await getSessionToken(app as any)
         }
       } catch (error) {
         console.warn('[Authenticated Fetch] Failed to get session token:', error)
