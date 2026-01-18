@@ -107,7 +107,8 @@ export async function POST(request: Request) {
     try {
       for (const collection of collections) {
         const url = `https://${shop}/collections/${collection.handle}`
-        const updatedAt = collection.updated_at ? new Date(collection.updated_at) : new Date()
+        // Collections don't have updated_at in the API response, use current date
+        const updatedAt = new Date()
 
         await prisma.page.upsert({
           where: {
