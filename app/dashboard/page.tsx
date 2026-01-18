@@ -1,7 +1,6 @@
-import { auth, currentUser } from "@clerk/nextjs/server"
-import { UserButton } from "@clerk/nextjs"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
+import { getSiteFromSessionServer, ShopifySessionTokenError } from "@/lib/get-site-from-session-server"
 import { SyncBaselineButton } from "@/components/sync-baseline-button"
 import { DisconnectShopifyButton } from "@/components/disconnect-shopify-button"
 import { ContentGeneration } from "@/components/content-generation"
@@ -11,48 +10,24 @@ export default async function DashboardPage({
 }: {
   searchParams: { shopify?: string; msg?: string }
 }) {
-  const { userId } = await auth()
-
-  // Redirect to login if not authenticated
-  if (!userId) {
-    redirect("/login")
-  }
-
-  // Get or create user in database
-  let user = await prisma.user.findUnique({
-    where: { clerkId: userId },
-    include: { sites: true },
-  })
-
-  // If user doesn't exist in database, create them
-  // This happens on first login after Clerk authentication
-  if (!user) {
-    // Get user info from Clerk
-    const clerkUser = await currentUser()
-    
-    if (!clerkUser) {
-      redirect("/login")
+  // Verify Shopify session token from request headers
+  // This replaces Clerk authentication with Shopify session token verification
+  // Embedded Shopify app will send session token via App Bridge
+  let site
+  
+  try {
+    // Get site from Shopify session token (stateless - no user lookup)
+    // This verifies the token and looks up the site by shop domain
+    site = await getSiteFromSessionServer()
+  } catch (error) {
+    if (error instanceof ShopifySessionTokenError) {
+      // If no valid Shopify session token, redirect to landing page
+      // User must install app from Shopify App Store first
+      redirect("/")
     }
-
-    // Get primary email
-    const primaryEmail = clerkUser.emailAddresses.find(
-      (email) => email.id === clerkUser.primaryEmailAddressId
-    )?.emailAddress || clerkUser.emailAddresses[0]?.emailAddress || ''
-
-    // Create user in database
-    user = await prisma.user.create({
-      data: {
-        clerkId: userId,
-        email: primaryEmail,
-        name: clerkUser.firstName && clerkUser.lastName 
-          ? `${clerkUser.firstName} ${clerkUser.lastName}`
-          : clerkUser.firstName || clerkUser.lastName || null,
-      },
-      include: { sites: true },
-    })
+    throw error
   }
 
-  const site = user.sites[0] // MVP: one site per user
   const hasShopify = !!site?.shopifyAccessToken
 
   // Get counts for dashboard
@@ -74,9 +49,8 @@ export default async function DashboardPage({
   return (
     <main className="flex min-h-screen flex-col p-24">
       <div className="z-10 max-w-7xl w-full">
-        <div className="flex justify-between items-center mb-8">
+        <div className="mb-8">
           <h1 className="text-3xl font-bold">Dashboard</h1>
-          <UserButton afterSignOutUrl="/login" />
         </div>
 
         {/* Success/Error Messages */}

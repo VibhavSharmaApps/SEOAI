@@ -9,6 +9,9 @@ import { verifyShopifyRequest, ShopifySessionInfo, ShopifySessionTokenError } fr
 import { decryptToken } from './shopify-oauth'
 import { GSCAuthRequiredError } from './gsc-errors'
 
+// Re-export ShopifySessionTokenError for convenience (used by API routes)
+export { ShopifySessionTokenError } from './shopify-session-verification'
+
 export interface SiteWithGSC {
   site: {
     id: string

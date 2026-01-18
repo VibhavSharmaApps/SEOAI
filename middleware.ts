@@ -1,13 +1,22 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 
-const isProtectedRoute = createRouteMatcher(['/dashboard(.*)'])
-
-export default clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) {
-    const { protect } = await auth()
-    await protect()
-  }
-})
+/**
+ * Next.js Middleware
+ * 
+ * Note: Route protection for /dashboard is now handled at the page level
+ * using Shopify session token verification instead of Clerk.
+ * 
+ * API routes verify Shopify session tokens directly in each route handler.
+ * 
+ * This middleware file is kept for future use but currently does not
+ * enforce any authentication. All auth is handled via Shopify session tokens.
+ */
+export function middleware(request: NextRequest) {
+  // Allow all requests - authentication is handled at page/API route level
+  // using Shopify session token verification
+  return NextResponse.next()
+}
 
 export const config = {
   matcher: [
@@ -17,4 +26,3 @@ export const config = {
     '/(api|trpc)(.*)',
   ],
 }
-

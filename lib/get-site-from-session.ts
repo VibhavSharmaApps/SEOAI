@@ -1,10 +1,13 @@
 /**
  * Helper to get site from Shopify session token
- * Replaces Clerk-based user lookup with stateless Shopify session token lookup
+ * Stateless authentication using Shopify session tokens (no user lookup required)
  */
 
 import { prisma } from './prisma'
 import { verifyShopifyRequest, ShopifySessionInfo, ShopifySessionTokenError } from './shopify-session-verification'
+
+// Re-export ShopifySessionTokenError for convenience (used by API routes)
+export { ShopifySessionTokenError } from './shopify-session-verification'
 
 export interface SiteWithToken {
   site: {
