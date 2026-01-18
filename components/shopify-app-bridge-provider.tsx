@@ -1,7 +1,13 @@
 'use client'
 
 import { useMemo } from 'react'
-import type { AppBridgeConfig } from '@shopify/app-bridge'
+
+// App Bridge configuration type (inline definition since @shopify/app-bridge doesn't export AppBridgeConfig)
+type AppBridgeConfig = {
+  apiKey: string
+  host: string
+  forceRedirect?: boolean
+}
 
 // Try importing Provider - if it doesn't exist, we'll handle it gracefully
 // In App Bridge React v4, Provider may be available differently
