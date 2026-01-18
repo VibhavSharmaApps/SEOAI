@@ -1,8 +1,10 @@
 'use client'
 
 import { useMemo } from 'react'
-import { Provider as AppBridgeProvider } from '@shopify/app-bridge-react'
+import AppBridgeReact from '@shopify/app-bridge-react'
 import type { AppBridgeConfig } from '@shopify/app-bridge'
+
+const { Provider: AppBridgeProvider } = AppBridgeReact
 
 /**
  * Shopify App Bridge Provider
