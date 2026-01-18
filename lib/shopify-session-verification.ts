@@ -5,10 +5,13 @@
  * Production-safe implementation using Shopify's official JWT verification
  */
 
-import { shopifyApi, LATEST_API_VERSION, InvalidJwtError } from '@shopify/shopify-api'
+import { shopifyApi, InvalidJwtError } from '@shopify/shopify-api'
 
 const SHOPIFY_API_KEY = process.env.SHOPIFY_API_KEY
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET
+
+// Use latest stable API version (2024-10 as of early 2025)
+const API_VERSION = '2024-10'
 
 if (!SHOPIFY_API_KEY || !SHOPIFY_API_SECRET) {
   if (process.env.NODE_ENV === 'production') {
@@ -27,7 +30,7 @@ if (SHOPIFY_API_KEY && SHOPIFY_API_SECRET) {
     apiSecretKey: SHOPIFY_API_SECRET,
     scopes: [], // Not needed for token verification
     hostName: process.env.NEXT_PUBLIC_APP_URL?.replace(/^https?:\/\//, '').split('/')[0] || 'localhost',
-    apiVersion: LATEST_API_VERSION,
+    apiVersion: API_VERSION,
     isEmbeddedApp: true, // Required for session token verification
   })
 }

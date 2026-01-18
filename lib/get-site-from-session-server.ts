@@ -8,6 +8,9 @@ import { headers } from 'next/headers'
 import { prisma } from './prisma'
 import { verifyShopifySessionToken, ShopifySessionTokenError } from './shopify-session-verification'
 
+// Re-export ShopifySessionTokenError for convenience (used by server components)
+export { ShopifySessionTokenError } from './shopify-session-verification'
+
 export interface SiteFromSession {
   id: string
   domain: string
