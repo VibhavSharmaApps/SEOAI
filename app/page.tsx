@@ -183,20 +183,6 @@ export default function LandingPage() {
           </p>
         </div>
       </section>
-
-      {/* Final CTA */}
-      <section className="bg-card border-t py-16 px-4">
-        <div className="max-w-2xl mx-auto text-center space-y-6">
-          <a
-            href={installUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block px-8 py-4 bg-primary text-primary-foreground text-lg font-semibold rounded-lg hover:bg-primary/90 transition-colors shadow-lg hover:shadow-xl"
-          >
-            Install on Shopify
-          </a>
-        </div>
-      </section>
     </main>
   )
 }
