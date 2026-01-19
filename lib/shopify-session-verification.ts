@@ -36,7 +36,7 @@ function getShopifyInstance(): ReturnType<typeof shopifyApi> {
       apiSecretKey: SHOPIFY_API_SECRET,
       scopes: [], // Not needed for token verification
       hostName: process.env.NEXT_PUBLIC_APP_URL?.replace(/^https?:\/\//, '').split('/')[0] || 'localhost',
-      apiVersion: ApiVersion.October24, // Use enum value for 2024-10 API version
+      apiVersion: '2026-01' as ApiVersion, // Use API version 2026-01
       isEmbeddedApp: true, // Required for session token verification
     })
   }

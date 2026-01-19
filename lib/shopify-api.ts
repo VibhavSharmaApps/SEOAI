@@ -9,8 +9,8 @@ async function shopifyRequest(
   accessToken: string,
   endpoint: string
 ): Promise<{ data: any; headers: Headers }> {
-  // Use latest stable API version (2024-10 as of early 2025)
-  const apiVersion = '2024-10'
+  // Use API version 2026-01
+  const apiVersion = '2026-01'
   const url = `https://${shop}/admin/api/${apiVersion}/${endpoint}`
   
   console.log(`[Shopify API] Requesting: ${url}`)

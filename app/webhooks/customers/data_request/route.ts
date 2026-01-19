@@ -11,18 +11,34 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 /**
- * RAW BODY ACCESS CONFIGURATION
+ * RAW BODY ACCESS - WEBHOOK ROUTES ONLY
  * 
- * In Next.js App Router, the request body is available as a stream.
- * By calling request.arrayBuffer() FIRST, we read the raw bytes directly
- * from the stream before Next.js can parse it as JSON.
+ * This route uses raw body access for HMAC verification.
+ * Other API routes (/api/*) continue to use request.json() normally.
  * 
- * This ensures:
- * - Raw body is available for HMAC verification
- * - Body is NOT pre-parsed as JSON
- * - Exact payload bytes match Shopify's HMAC calculation
+ * How raw body is obtained:
+ * 1. Request body is a stream (not pre-parsed)
+ * 2. Call request.arrayBuffer() to read raw bytes
+ * 3. Convert ArrayBuffer to Buffer for HMAC verification
+ * 4. Stream is consumed - cannot be read again
+ * 5. Parse JSON from the same buffer (after verification)
  * 
- * IMPORTANT: Do NOT call request.json() before arrayBuffer() - it will consume the stream.
+ * Implementation:
+ * ```typescript
+ * const rawBody = await request.arrayBuffer()  // Read raw bytes from stream
+ * const bodyBuffer = Buffer.from(rawBody)       // Convert to Buffer
+ * verifyShopifyWebhook(bodyBuffer, hmacHeader) // Verify using raw bytes
+ * const payload = JSON.parse(bodyBuffer.toString('utf-8')) // Parse after verification
+ * ```
+ * 
+ * Why this works:
+ * - Next.js App Router provides body as a stream
+ * - Calling arrayBuffer() consumes the stream
+ * - No global body parser affects this route
+ * - Other routes use request.json() and are unaffected
+ * 
+ * IMPORTANT: Do NOT call request.json() - it would consume the stream.
+ *            Use arrayBuffer() first, then parse from the buffer.
  */
 
 /**

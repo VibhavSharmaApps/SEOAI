@@ -8,7 +8,7 @@ export async function fetchProductDescription(
   accessToken: string,
   productId: string
 ): Promise<string | null> {
-  const apiVersion = '2024-10'
+  const apiVersion = '2026-01'
   const url = `https://${shop}/admin/api/${apiVersion}/products/${productId}.json?fields=body_html`
 
   try {

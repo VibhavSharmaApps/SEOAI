@@ -1,6 +1,6 @@
 import { decryptToken } from './shopify-oauth'
 
-const API_VERSION = '2024-10'
+const API_VERSION = '2026-01'
 
 /**
  * Updates a product's description in Shopify

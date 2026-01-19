@@ -1,16 +1,29 @@
 /**
- * Shopify Webhook HMAC Verification
- * Verifies webhook requests from Shopify using HMAC-SHA256 signature
+ * Shopify Webhook HMAC Verification Utility
  * 
- * Required for all Shopify webhook endpoints for security
+ * Framework-agnostic utility for verifying Shopify webhook HMAC signatures.
+ * Can be used with any Node.js web framework (Express, Next.js, Fastify, etc.).
  * 
- * This utility function:
- * - Uses the raw request body (not parsed JSON)
- * - Uses the app's Shopify API secret
- * - Computes HMAC SHA256
- * - Compares against the 'X-Shopify-Hmac-Sha256' header
- * - Uses timing-safe comparison to prevent timing attacks
- * - Throws an error if verification fails
+ * Requirements:
+ * - Accept raw body (Buffer)
+ * - Accept HMAC header value
+ * - Use timing-safe comparison
+ * - Throw error on failure
+ * - No framework-specific code
+ * 
+ * Usage:
+ * ```typescript
+ * import { verifyShopifyWebhook, ShopifyWebhookVerificationError } from './shopify-webhook-verification'
+ * 
+ * try {
+ *   verifyShopifyWebhook(rawBodyBuffer, hmacHeader)
+ *   // Verification succeeded - proceed with webhook processing
+ * } catch (error) {
+ *   if (error instanceof ShopifyWebhookVerificationError) {
+ *     // Return 401 or 403
+ *   }
+ * }
+ * ```
  */
 
 import crypto from 'crypto'
@@ -19,6 +32,7 @@ const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET
 
 /**
  * Custom error class for webhook verification failures
+ * Framework-agnostic - can be used with any web framework
  */
 export class ShopifyWebhookVerificationError extends Error {
   constructor(
@@ -34,22 +48,60 @@ export class ShopifyWebhookVerificationError extends Error {
 /**
  * Verifies Shopify webhook HMAC signature
  * 
- * This function:
- * - Reads the raw request body (Buffer or string)
+ * Framework-agnostic utility function that:
+ * - Accepts raw request body as Buffer (or string, converted to Buffer)
+ * - Accepts HMAC header value from X-Shopify-Hmac-Sha256 header
  * - Computes HMAC-SHA256 using SHOPIFY_API_SECRET
- * - Compares against X-Shopify-Hmac-Sha256 header using timing-safe comparison
- * - Throws ShopifyWebhookVerificationError if verification fails
+ * - Uses timing-safe comparison to prevent timing attacks
+ * - Throws ShopifyWebhookVerificationError on failure
  * 
- * @param rawBody - Raw request body (as Buffer or string) - MUST be unparsed
+ * @param rawBody - Raw request body as Buffer (or string, will be converted to Buffer)
+ *                  MUST be unparsed raw bytes for accurate HMAC verification
  * @param hmacHeader - X-Shopify-Hmac-Sha256 header value from request headers
+ *                    Can be null/undefined if header is missing
+ * 
  * @throws ShopifyWebhookVerificationError if:
- *   - SHOPIFY_API_SECRET is not set
- *   - HMAC header is missing
- *   - HMAC signature does not match
+ *   - SHOPIFY_API_SECRET is not set (statusCode: 500)
+ *   - HMAC header is missing (statusCode: 401)
+ *   - HMAC signature does not match (statusCode: 401)
+ * 
+ * @example
+ * ```typescript
+ * // In Express.js
+ * app.post('/webhook', async (req, res) => {
+ *   const rawBody = Buffer.from(req.body)
+ *   const hmacHeader = req.headers['x-shopify-hmac-sha256']
+ *   
+ *   try {
+ *     verifyShopifyWebhook(rawBody, hmacHeader)
+ *     res.status(200).json({ success: true })
+ *   } catch (error) {
+ *     if (error instanceof ShopifyWebhookVerificationError) {
+ *       res.status(error.statusCode).json({ error: error.message })
+ *     }
+ *   }
+ * })
+ * 
+ * // In Next.js App Router
+ * export async function POST(request: Request) {
+ *   const rawBody = await request.arrayBuffer()
+ *   const bodyBuffer = Buffer.from(rawBody)
+ *   const hmacHeader = request.headers.get('X-Shopify-Hmac-Sha256')
+ *   
+ *   try {
+ *     verifyShopifyWebhook(bodyBuffer, hmacHeader)
+ *     return NextResponse.json({ success: true }, { status: 200 })
+ *   } catch (error) {
+ *     if (error instanceof ShopifyWebhookVerificationError) {
+ *       return NextResponse.json({ error: error.message }, { status: error.statusCode })
+ *     }
+ *   }
+ * }
+ * ```
  */
 export function verifyShopifyWebhook(
   rawBody: Buffer | string,
-  hmacHeader: string | null
+  hmacHeader: string | null | undefined
 ): void {
   // Validate API secret is configured
   if (!SHOPIFY_API_SECRET) {
@@ -69,11 +121,13 @@ export function verifyShopifyWebhook(
 
   // Convert rawBody to Buffer if it's a string
   // IMPORTANT: Body must be raw (unparsed) for accurate HMAC verification
+  // Framework-agnostic: accepts Buffer (preferred) or string
   const bodyBuffer = typeof rawBody === 'string' 
     ? Buffer.from(rawBody, 'utf-8') 
     : rawBody
 
   // Compute HMAC-SHA256 using the app's Shopify API secret
+  // Framework-agnostic: uses Node.js crypto module (standard library)
   const calculatedHmac = crypto
     .createHmac('sha256', SHOPIFY_API_SECRET)
     .update(bodyBuffer)
@@ -81,12 +135,14 @@ export function verifyShopifyWebhook(
 
   // Compare HMACs using timing-safe comparison to prevent timing attacks
   // This prevents attackers from inferring the correct HMAC through timing analysis
+  // Framework-agnostic: uses Node.js crypto.timingSafeEqual (standard library)
   const isValid = crypto.timingSafeEqual(
     Buffer.from(calculatedHmac),
     Buffer.from(hmacHeader)
   )
 
   // Throw error if verification fails
+  // Framework-agnostic: throws error, caller handles response
   if (!isValid) {
     throw new ShopifyWebhookVerificationError(
       'HMAC signature verification failed. Webhook may be from an untrusted source.',
@@ -96,5 +152,6 @@ export function verifyShopifyWebhook(
 
   // If we reach here, verification succeeded
   // No return value needed - function throws on failure
+  // Framework-agnostic: silent success, caller proceeds with webhook processing
 }
 

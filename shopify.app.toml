@@ -1,0 +1,32 @@
+# Shopify App Configuration
+# Minimal configuration for existing app - customer privacy webhooks only
+
+client_id = "3c5768229ec8a422da727a6a9054e32c"
+name = "RankifyEO"
+application_url = "https://rankifyeo.com"
+embedded = true
+api_version = "2026-01"
+scopes = "read_content,write_content,read_products,write_products,read_collections"
+
+# Auth configuration (required)
+[auth]
+redirect_urls = [
+  "https://rankifyeo.com/api/shopify/callback"
+]
+
+# Mandatory customer privacy webhooks only
+[webhooks]
+api_version = "2026-01"
+
+  [[webhooks.subscriptions]]
+  topics = ["customers/data_request"]
+  uri = "https://rankifyeo.com/webhooks/customers/data_request"
+
+  [[webhooks.subscriptions]]
+  topics = ["customers/redact"]
+  uri = "https://rankifyeo.com/webhooks/customers/redact"
+
+  [[webhooks.subscriptions]]
+  topics = ["shop/redact"]
+  uri = "https://rankifyeo.com/webhooks/shop/redact"
+
