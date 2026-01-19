@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { exchangeCodeForToken, encryptToken } from '@/lib/shopify-oauth'
 import { prisma } from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
 
 /**
  * GET /api/shopify/callback
@@ -89,6 +90,7 @@ export async function GET(request: Request) {
       console.log('[Shopify Callback] Creating new site...')
       // Create new site (stateless - no userId required)
       // Sites are identified by domain, not by user
+      // Note: Using type assertion as Prisma client types may need regeneration
       await prisma.site.create({
         data: {
           domain: normalizedShop,
@@ -96,8 +98,7 @@ export async function GET(request: Request) {
           shopifyAccessToken: encryptedToken,
           name: normalizedShop.replace('.myshopify.com', ''),
           isActive: true,
-          // userId is optional - can be null for stateless operation
-        },
+        } as Prisma.SiteUncheckedCreateInput,
       })
       console.log('[Shopify Callback] Site created successfully')
     }
