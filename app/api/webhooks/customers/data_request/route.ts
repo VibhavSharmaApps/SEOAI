@@ -42,7 +42,7 @@ export const runtime = 'nodejs'
  */
 
 /**
- * POST /webhooks/customers/data_request
+ * POST /api/webhooks/customers/data_request
  * 
  * Mandatory Shopify webhook for customer data requests (GDPR/CCPA compliance)
  * 

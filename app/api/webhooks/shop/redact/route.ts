@@ -42,7 +42,7 @@ export const runtime = 'nodejs'
  */
 
 /**
- * POST /webhooks/shop/redact
+ * POST /api/webhooks/shop/redact
  * 
  * Mandatory Shopify webhook for shop data deletion requests (GDPR/CCPA compliance)
  * 
