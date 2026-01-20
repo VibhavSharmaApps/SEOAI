@@ -16,13 +16,21 @@ export default async function DashboardPage({
   try {
     // Try to get site from Shopify session token (optional - don't block if missing)
     site = await getSiteFromSessionServer()
+    console.log('[Dashboard] Site retrieved successfully:', { 
+      siteId: site?.id, 
+      domain: site?.domain,
+      hasToken: !!site?.shopifyAccessToken 
+    })
   } catch (error) {
+    // Log error for debugging (but don't show to user)
+    console.warn('[Dashboard] Failed to get site from session:', error instanceof Error ? error.message : 'Unknown error')
     // Silently handle auth errors - embedded routes must always render UI
     // No error messages, no install-enforcement, just render empty state
     site = null
   }
 
   const hasShopify = !!site?.shopifyAccessToken
+  console.log('[Dashboard] hasShopify:', hasShopify)
 
   // Get counts for dashboard
   const blogPostCount = site
