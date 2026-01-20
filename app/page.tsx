@@ -1,9 +1,24 @@
+import { redirect } from 'next/navigation'
+
 /**
  * Public Landing Page
  * This page is accessible without authentication (no Shopify OAuth, no Clerk)
  * Contains marketing content and a single CTA to install the app on Shopify
+ * 
+ * IMPORTANT: If accessed with 'host' query parameter (embedded context),
+ * redirects to /dashboard to ensure embedded users see the app UI.
  */
-export default function LandingPage() {
+export default function LandingPage({
+  searchParams,
+}: {
+  searchParams: { host?: string }
+}) {
+  // Detect embedded context - if 'host' parameter is present, user is in Shopify Admin
+  // Redirect to dashboard to show the app UI instead of landing page
+  if (searchParams.host) {
+    redirect('/dashboard')
+  }
+
   // Get Shopify App Store listing URL or Partner install link from environment variable
   // Format: App Store listing URL (e.g., https://apps.shopify.com/rankifyeo)
   // Or: Partner install link (e.g., https://partners.shopify.com/.../apps/.../install)

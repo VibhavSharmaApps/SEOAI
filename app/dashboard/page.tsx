@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
-import { getSiteFromSessionServer, ShopifySessionTokenError } from "@/lib/get-site-from-session-server"
+import { getSiteFromSessionServer } from "@/lib/get-site-from-session-server"
 import { SyncBaselineButton } from "@/components/sync-baseline-button"
 import { DisconnectShopifyButton } from "@/components/disconnect-shopify-button"
 import { ContentGeneration } from "@/components/content-generation"
@@ -10,22 +9,17 @@ export default async function DashboardPage({
 }: {
   searchParams: { shopify?: string; msg?: string }
 }) {
-  // Verify Shopify session token from request headers
-  // This replaces Clerk authentication with Shopify session token verification
-  // Embedded Shopify app will send session token via App Bridge
-  let site
+  // Embedded app route - always render UI, never block access
+  // Silently handle missing auth (no error messages or install-enforcement)
+  let site = null
   
   try {
-    // Get site from Shopify session token (stateless - no user lookup)
-    // This verifies the token and looks up the site by shop domain
+    // Try to get site from Shopify session token (optional - don't block if missing)
     site = await getSiteFromSessionServer()
   } catch (error) {
-    if (error instanceof ShopifySessionTokenError) {
-      // If no valid Shopify session token, redirect to landing page
-      // User must install app from Shopify App Store first
-      redirect("/")
-    }
-    throw error
+    // Silently handle auth errors - embedded routes must always render UI
+    // No error messages, no install-enforcement, just render empty state
+    site = null
   }
 
   const hasShopify = !!site?.shopifyAccessToken
@@ -130,28 +124,13 @@ export default async function DashboardPage({
           </div>
         )}
 
-        {/* Connect Shopify if not connected */}
+        {/* Empty state when not connected - no install-enforcement messaging */}
         {!hasShopify && (
           <div className="bg-card p-8 rounded-lg border">
-            <h2 className="text-xl font-semibold mb-4">Install from Shopify</h2>
-            <p className="text-muted-foreground mb-4">
-              This app must be installed from the Shopify App Store or Partners dashboard.
-              Installation cannot be initiated from this page.
+            <h2 className="text-xl font-semibold mb-4">Dashboard</h2>
+            <p className="text-muted-foreground">
+              Connect your Shopify store to get started.
             </p>
-            <div className="space-y-3">
-              <div className="p-4 bg-muted rounded-md">
-                <p className="text-sm font-medium mb-2">To install this app:</p>
-                <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
-                  <li>Go to Shopify App Store or Partners dashboard</li>
-                  <li>Find this app and click "Install" or "Get"</li>
-                  <li>Follow Shopify's installation flow</li>
-                  <li>You'll be redirected back here after installation</li>
-                </ol>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                <strong>Note:</strong> Installation must be initiated from Shopify-owned surfaces for security and compliance.
-              </p>
-            </div>
           </div>
         )}
       </div>
