@@ -15,6 +15,16 @@ export function SyncBaselineButton() {
     setResult(null)
 
     try {
+      // Check if App Bridge is initialized before making request
+      if (typeof window !== 'undefined' && !(window as any).shopify?.app) {
+        // Wait a bit for App Bridge to initialize (if it's still initializing)
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
+        if (!(window as any).shopify?.app) {
+          throw new Error('App Bridge not initialized. Please ensure you are accessing the app from Shopify Admin and refresh the page if needed.')
+        }
+      }
+
       const response = await fetchWithAuth('/api/store/baseline', {
         method: 'POST',
       })

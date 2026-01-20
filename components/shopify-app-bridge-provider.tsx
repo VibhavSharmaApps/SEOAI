@@ -35,7 +35,27 @@ export function ShopifyAppBridgeProvider({ children }: { children: React.ReactNo
     // Dynamically import and initialize App Bridge
     async function initializeAppBridge() {
       try {
+        console.log('[App Bridge] Starting initialization...', { apiKey: apiKey ? apiKey.substring(0, 8) + '...' : 'missing', host: host ? host.substring(0, 20) + '...' : 'missing' })
+        
         const appBridge = await import('@shopify/app-bridge')
+        console.log('[App Bridge] Module imported, available methods:', Object.keys(appBridge))
+        
+        // Check if createApp exists
+        if (!appBridge.createApp) {
+          console.error('[App Bridge] createApp method not found in @shopify/app-bridge')
+          // Try alternative initialization methods
+          if ((appBridge as any).default?.createApp) {
+            console.log('[App Bridge] Using default.createApp')
+            const app = (appBridge as any).default.createApp({ apiKey, host, forceRedirect: false })
+            if (!(window as any).shopify) {
+              (window as any).shopify = {}
+            }
+            (window as any).shopify.app = app
+            console.log('[App Bridge] Initialized using default.createApp')
+            return
+          }
+          throw new Error('createApp method not found')
+        }
         
         // Initialize App Bridge using createApp
         const config = {
@@ -44,15 +64,23 @@ export function ShopifyAppBridgeProvider({ children }: { children: React.ReactNo
           forceRedirect: false,
         }
 
+        console.log('[App Bridge] Calling createApp with config...')
         const app = appBridge.createApp(config)
+        console.log('[App Bridge] createApp returned:', app ? 'app instance' : 'null')
         
         // Store app instance on window for useAuthenticatedFetch to access
         if (!(window as any).shopify) {
           (window as any).shopify = {}
         }
         (window as any).shopify.app = app
+        
+        console.log('[App Bridge] Initialized successfully, stored on window.shopify.app')
+        console.log('[App Bridge] window.shopify:', Object.keys((window as any).shopify))
       } catch (error) {
-        console.warn('[App Bridge] Failed to initialize:', error)
+        console.error('[App Bridge] Failed to initialize:', error)
+        if (error instanceof Error) {
+          console.error('[App Bridge] Error details:', error.message, error.stack)
+        }
       }
     }
 
