@@ -1,29 +1,41 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useAuthenticatedFetch } from '@/lib/use-authenticated-fetch'
+import { useAppBridgeReady } from '@/lib/use-app-bridge-ready'
 
 /**
  * Component that makes authenticated status check
- * Only renders when App Bridge Provider is available (embedded context)
+ * Only runs after App Bridge is initialized
  */
 function DashboardStatusCheckInner() {
   const fetchWithAuth = useAuthenticatedFetch()
+  const isAppBridgeReady = useAppBridgeReady()
 
   useEffect(() => {
-    // Silent background fetch after initial render
+    // Guard: Only run on client
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    // Guard: Wait for App Bridge to be ready before making request
+    if (!isAppBridgeReady) {
+      return
+    }
+
+    // Silent background fetch after App Bridge is ready
     async function checkStatus() {
       try {
         await fetchWithAuth('/api/dashboard/status', {
           method: 'GET',
         })
       } catch (error) {
-        // Silently fail
+        // Silently fail - this is just a background check
       }
     }
 
     checkStatus()
-  }, [fetchWithAuth])
+  }, [fetchWithAuth, isAppBridgeReady])
 
   return null // No UI
 }

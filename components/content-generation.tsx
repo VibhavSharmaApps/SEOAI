@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAuthenticatedFetch } from '@/lib/use-authenticated-fetch'
+import { useAppBridgeReady } from '@/lib/use-app-bridge-ready'
 
 interface BlogPost {
   id: string
@@ -38,11 +39,22 @@ export function ContentGeneration() {
   const [keywordError, setKeywordError] = useState<string>('')
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null)
   const fetchWithAuth = useAuthenticatedFetch()
+  const isAppBridgeReady = useAppBridgeReady()
 
-  // Fetch blog posts on mount
+  // Fetch blog posts after App Bridge is ready
   useEffect(() => {
+    // Guard: Only run on client
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    // Guard: Wait for App Bridge to be ready before fetching
+    if (!isAppBridgeReady) {
+      return
+    }
+
     fetchBlogPosts()
-  }, [])
+  }, [isAppBridgeReady])
 
   const fetchBlogPosts = async () => {
     try {

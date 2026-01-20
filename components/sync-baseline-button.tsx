@@ -2,29 +2,32 @@
 
 import { useState } from "react"
 import { useAuthenticatedFetch } from "@/lib/use-authenticated-fetch"
+import { useAppBridgeReady } from "@/lib/use-app-bridge-ready"
 
 export function SyncBaselineButton() {
   const [isLoading, setIsLoading] = useState(false)
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const fetchWithAuth = useAuthenticatedFetch()
+  const isAppBridgeReady = useAppBridgeReady()
 
   const handleSync = async () => {
+    // Guard: Only run on client
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    // Guard: Wait for App Bridge to be ready
+    if (!isAppBridgeReady) {
+      setError('App Bridge is not ready yet. Please wait a moment and try again.')
+      return
+    }
+
     setIsLoading(true)
     setError(null)
     setResult(null)
 
     try {
-      // Check if App Bridge is initialized before making request
-      if (typeof window !== 'undefined' && !(window as any).shopify?.app) {
-        // Wait a bit for App Bridge to initialize (if it's still initializing)
-        await new Promise(resolve => setTimeout(resolve, 500))
-        
-        if (!(window as any).shopify?.app) {
-          throw new Error('App Bridge not initialized. Please ensure you are accessing the app from Shopify Admin and refresh the page if needed.')
-        }
-      }
-
       const response = await fetchWithAuth('/api/store/baseline', {
         method: 'POST',
       })
@@ -49,10 +52,10 @@ export function SyncBaselineButton() {
     <div className="space-y-4">
       <button
         onClick={handleSync}
-        disabled={isLoading}
+        disabled={isLoading || !isAppBridgeReady}
         className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {isLoading ? 'Syncing...' : 'Sync Store Content'}
+        {isLoading ? 'Syncing...' : isAppBridgeReady ? 'Sync Store Content' : 'Initializing...'}
       </button>
 
       {error && (
