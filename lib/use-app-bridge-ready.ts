@@ -38,7 +38,9 @@ export function useAppBridgeReady(): boolean {
         setIsReady(true)
         clearInterval(checkInterval)
       } else if (attempts >= maxAttempts) {
-        // Timeout - App Bridge not initialized
+        // Timeout - App Bridge not initialized after 5 seconds
+        // Log warning but don't set isReady to true (let components handle timeout)
+        console.warn('[App Bridge Ready] Timeout waiting for App Bridge initialization')
         clearInterval(checkInterval)
       }
     }, 100) // Check every 100ms

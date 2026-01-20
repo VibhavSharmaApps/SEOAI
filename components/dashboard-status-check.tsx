@@ -40,15 +40,11 @@ function DashboardStatusCheckInner() {
   const fetchWithAuth = useAuthenticatedFetch()
   const isAppBridgeReady = useAppBridgeReady()
   const hasRunRef = useRef(false)
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     // Guard: Only run on client
     if (typeof window === 'undefined') {
-      return
-    }
-
-    // Guard: Wait for App Bridge to be ready
-    if (!isAppBridgeReady) {
       return
     }
 
@@ -57,8 +53,32 @@ function DashboardStatusCheckInner() {
       return
     }
 
+    // Set a timeout to mark as initialized even if App Bridge never becomes ready
+    // This prevents buttons from being stuck in "Initializing..." forever
+    // Timeout is 6 seconds (1 second after App Bridge's 5 second timeout)
+    if (!timeoutRef.current) {
+      timeoutRef.current = setTimeout(() => {
+        if (!hasInitialized) {
+          console.warn('[Dashboard Status] App Bridge initialization timeout - marking dashboard as initialized anyway')
+          hasInitialized = true
+          initializationListeners.forEach(listener => listener(true))
+        }
+      }, 6000) // 6 second timeout
+    }
+
+    // Guard: Wait for App Bridge to be ready
+    if (!isAppBridgeReady) {
+      return
+    }
+
     // Mark as running
     hasRunRef.current = true
+
+    // Clear timeout since we're proceeding with the request
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
 
     // Make authenticated request once App Bridge is ready
     async function checkStatus() {
@@ -79,6 +99,12 @@ function DashboardStatusCheckInner() {
     }
 
     checkStatus()
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
   }, [fetchWithAuth, isAppBridgeReady])
 
   return null // No UI
@@ -86,20 +112,35 @@ function DashboardStatusCheckInner() {
 
 /**
  * Wrapper that conditionally renders the status check
- * Only renders when host parameter is present (embedded context)
+ * Always renders - if not embedded, marks as initialized immediately
  */
 export function DashboardStatusCheck() {
   const [isEmbedded, setIsEmbedded] = useState(false)
 
   useEffect(() => {
+    // Guard: Only run on client
+    if (typeof window === 'undefined') {
+      return
+    }
+
     // Check if we're in embedded context
     const urlParams = new URLSearchParams(window.location.search)
     const host = urlParams.get('host')
-    setIsEmbedded(!!host)
+    const embedded = !!host
+    setIsEmbedded(embedded)
+
+    // If not embedded, mark as initialized immediately
+    // This allows buttons to work even when not in embedded context
+    // (they'll just fail when making requests, but won't be stuck)
+    if (!embedded && !hasInitialized) {
+      console.log('[Dashboard Status] Not in embedded context - marking dashboard as initialized')
+      hasInitialized = true
+      initializationListeners.forEach(listener => listener(true))
+    }
   }, [])
 
-  // Only render if we're in embedded context (host present)
-  // This ensures Provider is available for useAppBridge() hook
+  // Only render inner component if embedded (to make authenticated request)
+  // If not embedded, we've already marked as initialized above
   if (!isEmbedded) {
     return null
   }
