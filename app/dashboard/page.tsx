@@ -1,53 +1,10 @@
-import { prisma } from "@/lib/prisma"
-import { getSiteFromSessionServer } from "@/lib/get-site-from-session-server"
-import { SyncBaselineButton } from "@/components/sync-baseline-button"
-import { DisconnectShopifyButton } from "@/components/disconnect-shopify-button"
-import { ContentGeneration } from "@/components/content-generation"
+import { DashboardClient } from "@/components/dashboard-client"
 
 export default async function DashboardPage({
   searchParams,
 }: {
   searchParams: { shopify?: string; msg?: string }
 }) {
-  // Embedded app route - always render UI, never block access
-  // Silently handle missing auth (no error messages or install-enforcement)
-  let site = null
-  
-  try {
-    // Try to get site from Shopify session token (optional - don't block if missing)
-    site = await getSiteFromSessionServer()
-    console.log('[Dashboard] Site retrieved successfully:', { 
-      siteId: site?.id, 
-      domain: site?.domain,
-      hasToken: !!site?.shopifyAccessToken 
-    })
-  } catch (error) {
-    // Log error for debugging (but don't show to user)
-    console.warn('[Dashboard] Failed to get site from session:', error instanceof Error ? error.message : 'Unknown error')
-    // Silently handle auth errors - embedded routes must always render UI
-    // No error messages, no install-enforcement, just render empty state
-    site = null
-  }
-
-  const hasShopify = !!site?.shopifyAccessToken
-  console.log('[Dashboard] hasShopify:', hasShopify)
-
-  // Get counts for dashboard
-  const blogPostCount = site
-    ? await prisma.page.count({
-        where: { 
-          siteId: site.id,
-          type: 'ARTICLE',
-        },
-      })
-    : 0
-
-  const autopilotRunCount = site
-    ? await prisma.autopilotRun.count({
-        where: { siteId: site.id },
-      })
-    : 0
-
   return (
     <main className="flex min-h-screen flex-col p-24">
       <div className="z-10 max-w-7xl w-full">
@@ -85,62 +42,8 @@ export default async function DashboardPage({
           </div>
         )}
 
-        {/* Dashboard Tile */}
-        {hasShopify && site && (
-          <div className="bg-card p-8 rounded-lg border mb-6">
-            <h2 className="text-xl font-semibold mb-4">Console</h2>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className={`${site.isActive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>●</span>
-                  <span className="font-medium">Connected Domain: {site.domain}</span>
-                </div>
-                <div className="pl-6 text-sm text-muted-foreground">
-                  <p><span className="font-medium">Status:</span> {site.isActive ? "Active" : "Inactive"}</p>
-                </div>
-              </div>
-              <div className="pt-4 border-t">
-                <SyncBaselineButton />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                <div className="p-4 bg-muted rounded-md">
-                  <p className="text-sm text-muted-foreground">Blog Posts</p>
-                  <p className="text-2xl font-bold">{blogPostCount}</p>
-                </div>
-                <div className="p-4 bg-muted rounded-md">
-                  <p className="text-sm text-muted-foreground">Tool Runs</p>
-                  <p className="text-2xl font-bold">{autopilotRunCount}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Content Generation Tile */}
-        {hasShopify && (
-          <div className="bg-card p-8 rounded-lg border mb-6">
-            <h2 className="text-xl font-semibold mb-4">Content Generation</h2>
-            <ContentGeneration />
-          </div>
-        )}
-
-        {/* Disconnect Shopify Button */}
-        {hasShopify && (
-          <div className="bg-card p-8 rounded-lg border">
-            <h2 className="text-xl font-semibold mb-4">Settings</h2>
-            <DisconnectShopifyButton />
-          </div>
-        )}
-
-        {/* Empty state when not connected - no install-enforcement messaging */}
-        {!hasShopify && (
-          <div className="bg-card p-8 rounded-lg border">
-            <h2 className="text-xl font-semibold mb-4">Dashboard</h2>
-            <p className="text-muted-foreground">
-              Connect your Shopify store to get started.
-            </p>
-          </div>
-        )}
+        {/* Dashboard UI - renders immediately, makes authenticated fetch in background */}
+        <DashboardClient />
       </div>
     </main>
   )
