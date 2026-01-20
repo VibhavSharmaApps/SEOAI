@@ -78,7 +78,7 @@ export default async function DashboardPage({
         )}
 
         {/* Dashboard Tile */}
-        {hasShopify && (
+        {hasShopify && site && (
           <div className="bg-card p-8 rounded-lg border mb-6">
             <h2 className="text-xl font-semibold mb-4">Console</h2>
             <div className="space-y-4">
