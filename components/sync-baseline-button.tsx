@@ -2,14 +2,14 @@
 
 import { useState } from "react"
 import { useAuthenticatedFetch } from "@/lib/use-authenticated-fetch"
-import { useAppBridgeReady } from "@/lib/use-app-bridge-ready"
+import { useDashboardInitialized } from "@/components/dashboard-status-check"
 
 export function SyncBaselineButton() {
   const [isLoading, setIsLoading] = useState(false)
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const fetchWithAuth = useAuthenticatedFetch()
-  const isAppBridgeReady = useAppBridgeReady()
+  const isInitialized = useDashboardInitialized()
 
   const handleSync = async () => {
     // Guard: Only run on client
@@ -17,9 +17,9 @@ export function SyncBaselineButton() {
       return
     }
 
-    // Guard: Wait for App Bridge to be ready
-    if (!isAppBridgeReady) {
-      setError('App Bridge is not ready yet. Please wait a moment and try again.')
+    // Guard: Wait for initial authenticated request to complete
+    if (!isInitialized) {
+      setError('Dashboard is still initializing. Please wait a moment and try again.')
       return
     }
 
@@ -52,10 +52,10 @@ export function SyncBaselineButton() {
     <div className="space-y-4">
       <button
         onClick={handleSync}
-        disabled={isLoading || !isAppBridgeReady}
+        disabled={isLoading || !isInitialized}
         className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {isLoading ? 'Syncing...' : isAppBridgeReady ? 'Sync Store Content' : 'Initializing...'}
+        {isLoading ? 'Syncing...' : isInitialized ? 'Sync Store Content' : 'Initializing...'}
       </button>
 
       {error && (

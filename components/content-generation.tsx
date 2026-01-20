@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAuthenticatedFetch } from '@/lib/use-authenticated-fetch'
-import { useAppBridgeReady } from '@/lib/use-app-bridge-ready'
+import { useDashboardInitialized } from '@/components/dashboard-status-check'
 
 interface BlogPost {
   id: string
@@ -39,22 +39,22 @@ export function ContentGeneration() {
   const [keywordError, setKeywordError] = useState<string>('')
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null)
   const fetchWithAuth = useAuthenticatedFetch()
-  const isAppBridgeReady = useAppBridgeReady()
+  const isInitialized = useDashboardInitialized()
 
-  // Fetch blog posts after App Bridge is ready
+  // Fetch blog posts after dashboard initialization completes
   useEffect(() => {
     // Guard: Only run on client
     if (typeof window === 'undefined') {
       return
     }
 
-    // Guard: Wait for App Bridge to be ready before fetching
-    if (!isAppBridgeReady) {
+    // Guard: Wait for initial authenticated request to complete before fetching
+    if (!isInitialized) {
       return
     }
 
     fetchBlogPosts()
-  }, [isAppBridgeReady])
+  }, [isInitialized])
 
   const fetchBlogPosts = async () => {
     try {

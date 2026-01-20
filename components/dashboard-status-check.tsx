@@ -1,16 +1,45 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useAuthenticatedFetch } from '@/lib/use-authenticated-fetch'
 import { useAppBridgeReady } from '@/lib/use-app-bridge-ready'
 
+// Global state to track if initial authenticated request has completed
+// This ensures the request runs only once per session
+let hasInitialized = false
+const initializationListeners = new Set<(initialized: boolean) => void>()
+
+/**
+ * Hook to check if the initial authenticated request has completed
+ */
+export function useDashboardInitialized(): boolean {
+  const [initialized, setInitialized] = useState(hasInitialized)
+
+  useEffect(() => {
+    if (hasInitialized) {
+      setInitialized(true)
+      return
+    }
+
+    const listener = (value: boolean) => setInitialized(value)
+    initializationListeners.add(listener)
+
+    return () => {
+      initializationListeners.delete(listener)
+    }
+  }, [])
+
+  return initialized
+}
+
 /**
  * Component that makes authenticated status check
- * Only runs after App Bridge is initialized
+ * Runs automatically once App Bridge is ready, only once per session
  */
 function DashboardStatusCheckInner() {
   const fetchWithAuth = useAuthenticatedFetch()
   const isAppBridgeReady = useAppBridgeReady()
+  const hasRunRef = useRef(false)
 
   useEffect(() => {
     // Guard: Only run on client
@@ -18,19 +47,34 @@ function DashboardStatusCheckInner() {
       return
     }
 
-    // Guard: Wait for App Bridge to be ready before making request
+    // Guard: Wait for App Bridge to be ready
     if (!isAppBridgeReady) {
       return
     }
 
-    // Silent background fetch after App Bridge is ready
+    // Guard: Run only once per session
+    if (hasRunRef.current || hasInitialized) {
+      return
+    }
+
+    // Mark as running
+    hasRunRef.current = true
+
+    // Make authenticated request once App Bridge is ready
     async function checkStatus() {
       try {
-        await fetchWithAuth('/api/dashboard/status', {
+        // Request session token and call backend endpoint
+        const response = await fetchWithAuth('/api/dashboard/status', {
           method: 'GET',
         })
+        
+        // Mark as initialized (regardless of success/failure)
+        hasInitialized = true
+        initializationListeners.forEach(listener => listener(true))
       } catch (error) {
-        // Silently fail - this is just a background check
+        // Mark as initialized even on error (so UI doesn't stay in "Initializing" forever)
+        hasInitialized = true
+        initializationListeners.forEach(listener => listener(true))
       }
     }
 

@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuthenticatedFetch } from "@/lib/use-authenticated-fetch"
-import { useAppBridgeReady } from "@/lib/use-app-bridge-ready"
+import { useDashboardInitialized } from "@/components/dashboard-status-check"
 
 export function DisconnectShopifyButton() {
   const [isLoading, setIsLoading] = useState(false)
@@ -11,7 +11,7 @@ export function DisconnectShopifyButton() {
   const [success, setSuccess] = useState(false)
   const router = useRouter()
   const fetchWithAuth = useAuthenticatedFetch()
-  const isAppBridgeReady = useAppBridgeReady()
+  const isInitialized = useDashboardInitialized()
 
   const handleDisconnect = async () => {
     // Guard: Only run on client
@@ -19,9 +19,9 @@ export function DisconnectShopifyButton() {
       return
     }
 
-    // Guard: Wait for App Bridge to be ready
-    if (!isAppBridgeReady) {
-      setError('App Bridge is not ready yet. Please wait a moment and try again.')
+    // Guard: Wait for initial authenticated request to complete
+    if (!isInitialized) {
+      setError('Dashboard is still initializing. Please wait a moment and try again.')
       return
     }
 
@@ -62,10 +62,10 @@ export function DisconnectShopifyButton() {
     <div className="space-y-2">
       <button
         onClick={handleDisconnect}
-        disabled={isLoading || success || !isAppBridgeReady}
+        disabled={isLoading || success || !isInitialized}
         className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
       >
-        {isLoading ? 'Disconnecting...' : success ? 'Disconnected! Redirecting...' : !isAppBridgeReady ? 'Initializing...' : 'Disconnect Shopify Store'}
+        {isLoading ? 'Disconnecting...' : success ? 'Disconnected! Redirecting...' : !isInitialized ? 'Initializing...' : 'Disconnect Shopify Store'}
       </button>
 
       {error && (
