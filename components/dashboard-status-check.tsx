@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuthenticatedFetch } from '@/lib/use-authenticated-fetch'
 import { useAppBridgeReady } from '@/lib/use-app-bridge-ready'
 
