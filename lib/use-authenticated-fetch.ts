@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback } from 'react'
-import { useAppBridge } from '@shopify/app-bridge-react'
 import { getSessionToken } from '@shopify/app-bridge/utilities'
 
 /**
@@ -16,7 +15,13 @@ import { getSessionToken } from '@shopify/app-bridge/utilities'
  * ```
  */
 export function useAuthenticatedFetch() {
-  const app = useAppBridge()
+  // Get App Bridge instance from window (set by Provider when initialized)
+  // This avoids calling useAppBridge() hook which requires Provider to be rendered
+  const getAppBridgeInstance = useCallback(() => {
+    if (typeof window === 'undefined') return null
+    // App Bridge sets window.shopify when initialized
+    return (window as any).shopify?.app || null
+  }, [])
 
   const fetchWithAuth = useCallback(
     async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -24,15 +29,13 @@ export function useAuthenticatedFetch() {
       let sessionToken: string | null = null
       
       try {
+        const app = getAppBridgeInstance()
         if (app) {
           // Use App Bridge utility to get session token
-          // Type cast needed because useAppBridge() returns ShopifyGlobal but getSessionToken expects ClientApplication
-          // This is a known type mismatch in @shopify/app-bridge-react v4.x
-          sessionToken = await getSessionToken(app as any)
+          sessionToken = await getSessionToken(app)
         }
       } catch (error) {
-        console.warn('[Authenticated Fetch] Failed to get session token:', error)
-        // Continue without token if App Bridge is not available (standalone mode)
+        // Silently fail - App Bridge not available (not embedded or Provider not rendered)
       }
 
       // Merge headers with Authorization token
@@ -71,7 +74,7 @@ export function useAuthenticatedFetch() {
         // No credentials needed - stateless backend uses Shopify session tokens only
       })
     },
-    [app]
+    [getAppBridgeInstance]
   )
 
   return fetchWithAuth

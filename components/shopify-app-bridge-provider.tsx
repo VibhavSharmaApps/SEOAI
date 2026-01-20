@@ -1,31 +1,13 @@
 'use client'
 
 import { useMemo } from 'react'
+import { Provider } from '@shopify/app-bridge-react'
 
-// App Bridge configuration type (inline definition since @shopify/app-bridge doesn't export AppBridgeConfig)
+// App Bridge configuration type
 type AppBridgeConfig = {
   apiKey: string
   host: string
   forceRedirect?: boolean
-}
-
-// Try importing Provider - if it doesn't exist, we'll handle it gracefully
-// In App Bridge React v4, Provider may be available differently
-let AppBridgeProvider: any = null
-
-// Use dynamic import to handle potential export differences
-if (typeof window !== 'undefined') {
-  // Client-side: try to import Provider
-  try {
-    // Attempt named import (should work if available)
-    const appBridgeReactModule = require('@shopify/app-bridge-react')
-    // Try multiple possible export patterns
-    AppBridgeProvider = appBridgeReactModule.Provider || 
-                       appBridgeReactModule.default?.Provider ||
-                       (appBridgeReactModule.default && typeof appBridgeReactModule.default === 'function' ? appBridgeReactModule.default : null)
-  } catch (error) {
-    // Provider not available - will handle in component
-  }
 }
 
 /**
@@ -59,24 +41,27 @@ export function ShopifyAppBridgeProvider({ children }: { children: React.ReactNo
     }
   }, [apiKey, host])
 
-  // Only render App Bridge provider if we have required config
-  // If not embedded (no host), app will work without App Bridge (standalone mode)
+  // Only render App Bridge provider if we have API key AND host parameter
+  // App Bridge requires host parameter to initialize (embedded context)
+  // If not embedded (no host), render children without Provider to avoid errors
   if (!apiKey) {
     console.warn('[App Bridge] API key not configured. App Bridge features will not work.')
     return <>{children}</>
   }
 
-  // If Provider is not available, render children directly (standalone mode)
-  if (!AppBridgeProvider) {
-    console.warn('[App Bridge] Provider component not available - running in standalone mode')
+  // If no host parameter, we're not in embedded context - don't initialize App Bridge
+  // This prevents "shopify global is not defined" errors
+  if (!host) {
+    // Not embedded - render children without Provider
+    // Components using App Bridge hooks should check for embedded context first
     return <>{children}</>
   }
 
-  // If no host parameter, app is not embedded - still wrap but App Bridge will handle it
+  // Wrap children with App Bridge Provider (only when embedded with host parameter)
   return (
-    <AppBridgeProvider config={config}>
+    <Provider config={config}>
       {children}
-    </AppBridgeProvider>
+    </Provider>
   )
 }
 
