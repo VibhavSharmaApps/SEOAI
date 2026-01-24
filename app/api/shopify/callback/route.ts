@@ -69,38 +69,25 @@ export async function GET(request: Request) {
     console.log('[Shopify Callback] Checking for existing site...')
     // Check if site already exists for this shop (stateless - no user lookup)
     // NOTE: This check happens AFTER token exchange - OAuth always completes first
-    const existingSite = await prisma.site.findFirst({
+    // Use upsert to prevent race conditions and ensure domain uniqueness
+    const site = await prisma.site.upsert({
       where: { domain: normalizedShop },
+      update: {
+        shopifyStoreUrl: `https://${normalizedShop}`,
+        shopifyAccessToken: encryptedToken,
+        isActive: true,
+      },
+      create: {
+        domain: normalizedShop,
+        shopifyStoreUrl: `https://${normalizedShop}`,
+        shopifyAccessToken: encryptedToken,
+        name: normalizedShop.replace('.myshopify.com', ''),
+        isActive: true,
+      } as Prisma.SiteUncheckedCreateInput,
     })
     
-    if (existingSite) {
-      console.log('[Shopify Callback] Updating existing site:', existingSite.id)
-      // Update existing site
-      await prisma.site.update({
-        where: { id: existingSite.id },
-        data: {
-          domain: normalizedShop,
-          shopifyStoreUrl: `https://${normalizedShop}`,
-          shopifyAccessToken: encryptedToken,
-          isActive: true,
-        },
-      })
-      console.log('[Shopify Callback] Site updated successfully')
-    } else {
-      console.log('[Shopify Callback] Creating new site...')
-      // Create new site (stateless - no userId required)
-      // Sites are identified by domain, not by user
-      // Note: Using type assertion as Prisma client types may need regeneration
-      await prisma.site.create({
-        data: {
-          domain: normalizedShop,
-          shopifyStoreUrl: `https://${normalizedShop}`,
-          shopifyAccessToken: encryptedToken,
-          name: normalizedShop.replace('.myshopify.com', ''),
-          isActive: true,
-        } as Prisma.SiteUncheckedCreateInput,
-      })
-      console.log('[Shopify Callback] Site created successfully')
+    if (site) {
+      console.log('[Shopify Callback] Site upserted successfully:', site.id)
     }
     
     console.log('[Shopify Callback] Preparing redirect to embedded app...')

@@ -4,6 +4,7 @@ import { SyncBaselineButton } from '@/components/sync-baseline-button'
 import { DisconnectShopifyButton } from '@/components/disconnect-shopify-button'
 import { ContentGeneration } from '@/components/content-generation'
 import { DashboardStatusCheck } from '@/components/dashboard-status-check'
+import { DISABLE_CONTENT_GENERATION_UI } from '@/lib/feature-flags'
 
 /**
  * Dashboard Client Component
@@ -26,10 +27,13 @@ export function DashboardClient() {
         </div>
       </div>
 
-      <div className="bg-card p-8 rounded-lg border mb-6">
-        <h2 className="text-xl font-semibold mb-4">Content Generation</h2>
-        <ContentGeneration />
-      </div>
+      {/* Content Generation UI - hidden when feature flag is enabled */}
+      {!DISABLE_CONTENT_GENERATION_UI && (
+        <div className="bg-card p-8 rounded-lg border mb-6">
+          <h2 className="text-xl font-semibold mb-4">Content Generation</h2>
+          <ContentGeneration />
+        </div>
+      )}
 
       <div className="bg-card p-8 rounded-lg border">
         <h2 className="text-xl font-semibold mb-4">Settings</h2>

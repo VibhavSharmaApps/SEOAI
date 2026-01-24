@@ -16,6 +16,7 @@ export interface SiteWithToken {
     shopifyStoreUrl: string
     shopifyAccessToken: string
     isActive: boolean
+    cmsType: 'SHOPIFY' | 'WORDPRESS'
   }
   sessionInfo: ShopifySessionInfo
 }
@@ -71,6 +72,7 @@ export async function getSiteFromSession(
       shopifyStoreUrl: site.shopifyStoreUrl,
       shopifyAccessToken: site.shopifyAccessToken,
       isActive: site.isActive,
+      cmsType: site.cmsType,
     },
     sessionInfo,
   }

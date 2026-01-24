@@ -18,6 +18,11 @@ enum SiteType {
   SHOPIFY
 }
 
+enum CmsType {
+  SHOPIFY
+  WORDPRESS
+}
+
 enum ContentStatus {
   DRAFT
   PUBLISHED
@@ -35,6 +40,19 @@ enum PageType {
   PRODUCT
   COLLECTION
   ARTICLE
+}
+
+enum ChangeIntentType {
+  UPDATE_META
+  ADD_INTERNAL_LINK
+  INJECT_SCHEMA
+}
+
+enum ChangeIntentStatus {
+  PENDING
+  APPLIED
+  FAILED
+  ROLLED_BACK
 }
 
 // ============================================================================
@@ -67,20 +85,22 @@ model User {
 // - shopifyAccessToken: Encrypted token for Shopify API access
 // - googleOAuthToken: Encrypted Google OAuth access token for Search Console API
 // - googleOAuthRefreshToken: Encrypted Google OAuth refresh token
+// - cmsType: Type of CMS platform (SHOPIFY or WORDPRESS)
 // - All SEO entities (Keywords, Content, Prompts, Runs) belong to a Site
 model Site {
-  id                    String   @id @default(cuid())
-  userId                String? // Optional for stateless operation (sites can exist without users)
-  type                  SiteType @default(SHOPIFY)
-  domain                String
-  shopifyStoreUrl       String
-  shopifyAccessToken    String? // Encrypted token for API access
-  googleOAuthToken      String? // Encrypted Google OAuth access token
+  id                      String   @id @default(cuid())
+  userId                  String? // Optional for stateless operation (sites can exist without users)
+  type                    SiteType @default(SHOPIFY)
+  cmsType                 CmsType  @default(SHOPIFY)
+  domain                  String
+  shopifyStoreUrl         String
+  shopifyAccessToken      String? // Encrypted token for API access
+  googleOAuthToken        String? // Encrypted Google OAuth access token
   googleOAuthRefreshToken String? // Encrypted Google OAuth refresh token
-  name                  String?
-  isActive              Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  name                    String?
+  isActive                Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   // Relations
   user            User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -91,6 +111,7 @@ model Site {
   pages           Page[]
   gscKeywordDaily GSCKeywordDaily[]
   gscProperties   GSCProperty[]
+  changeIntents   ChangeIntent[]
 
   @@unique([domain]) // Domain is unique (one site per shop domain)
   @@index([userId]) // Index for user lookups (when userId is present)
@@ -105,15 +126,15 @@ model Site {
 // - source: Where the keyword came from (e.g., "product:123", "collection:456", "seed")
 // - Notes: For tracking research, competition, etc.
 model Keyword {
-  id            String   @id @default(cuid())
-  siteId        String
-  keyword       String
-  targetUrl     String?  // URL this keyword should rank for
-  currentRanking Int?    // Current Google ranking (1-100, null if not ranked)
-  source        String?  // Source of the keyword (e.g., "product:123", "collection:456", "seed")
-  notes         String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             String   @id @default(cuid())
+  siteId         String
+  keyword        String
+  targetUrl      String? // URL this keyword should rank for
+  currentRanking Int? // Current Google ranking (1-100, null if not ranked)
+  source         String? // Source of the keyword (e.g., "product:123", "collection:456", "seed")
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   // Relations
   site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
@@ -131,14 +152,14 @@ model Keyword {
 // - position: Average position for this keyword on this date
 // - Allows tracking keyword performance trends day-by-day
 model GSCKeywordDaily {
-  id         String   @id @default(cuid())
-  siteId     String
-  keyword    String
-  date       DateTime // Date of the snapshot
-  impressions Int     // Total impressions
-  clicks     Int     // Total clicks
-  position   Float    // Average position
-  createdAt  DateTime @default(now())
+  id          String   @id @default(cuid())
+  siteId      String
+  keyword     String
+  date        DateTime // Date of the snapshot
+  impressions Int // Total impressions
+  clicks      Int // Total clicks
+  position    Float // Average position
+  createdAt   DateTime @default(now())
 
   // Relations
   site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
@@ -157,7 +178,7 @@ model GSCKeywordDaily {
 model GSCProperty {
   id        String   @id @default(cuid())
   siteId    String
-  siteUrl   String   // GSC property URL
+  siteUrl   String // GSC property URL
   isActive  Boolean  @default(true) // False if access revoked (401/403)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -179,15 +200,15 @@ model GSCProperty {
 // - publishedAt: When it was/will be published
 // - Links to the Site that owns it
 model Content {
-  id              String        @id @default(cuid())
-  siteId          String
-  shopifyArticleId String?      @unique // Shopify API article ID
-  title           String
-  url             String?
-  status          ContentStatus @default(DRAFT)
-  publishedAt     DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id               String        @id @default(cuid())
+  siteId           String
+  shopifyArticleId String?       @unique // Shopify API article ID
+  title            String
+  url              String?
+  status           ContentStatus @default(DRAFT)
+  publishedAt      DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   // Relations
   site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
@@ -202,14 +223,14 @@ model Content {
 // - version: For tracking prompt iterations (start at 1)
 // - Allows A/B testing and improving prompts over time
 model Prompt {
-  id          String   @id @default(cuid())
-  siteId      String
-  name        String
-  promptText  String   // The actual prompt template
-  version     Int      @default(1)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  siteId     String
+  name       String
+  promptText String // The actual prompt template
+  version    Int      @default(1)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   // Relations
   site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
@@ -227,16 +248,16 @@ model Prompt {
 // - errorMessage: If failed, what went wrong
 // - resultSummary: JSON field for storing job results/metrics
 model AutopilotRun {
-  id            String              @id @default(cuid())
-  siteId         String
-  scheduledFor   DateTime
-  startedAt      DateTime?
-  completedAt    DateTime?
-  status         AutopilotRunStatus @default(PENDING)
-  errorMessage   String?
-  resultSummary  Json?              // JSON object for flexible result storage
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  id            String             @id @default(cuid())
+  siteId        String
+  scheduledFor  DateTime
+  startedAt     DateTime?
+  completedAt   DateTime?
+  status        AutopilotRunStatus @default(PENDING)
+  errorMessage  String?
+  resultSummary Json? // JSON object for flexible result storage
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
 
   // Relations
   site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
@@ -254,21 +275,22 @@ model AutopilotRun {
 // - last_updated: When the resource was last updated in Shopify
 // - tracking_enabled: Whether SEO tracking is enabled for this page
 model Page {
-  id             String   @id @default(cuid())
-  siteId         String
-  shopifyId      String   // Shopify resource ID
-  type           PageType
-  title          String
-  url            String
-  lastUpdated    DateTime
+  id              String   @id @default(cuid())
+  siteId          String
+  shopifyId       String // Shopify resource ID
+  type            PageType
+  title           String
+  url             String
+  lastUpdated     DateTime
   trackingEnabled Boolean  @default(false) // Whether SEO tracking is enabled
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   // Relations
-  site                Site                 @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  contentVersions     ContentVersion[]
+  site                 Site                  @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  contentVersions      ContentVersion[]
   performanceSnapshots PerformanceSnapshot[]
+  changeIntents        ChangeIntent[]
 
   @@unique([siteId, shopifyId, type])
   @@index([siteId, type])
@@ -284,13 +306,13 @@ model Page {
 // - publishedAt: When this version was published to Shopify (null if not published)
 // - Allows tracking content evolution and A/B testing
 model ContentVersion {
-  id         String    @id @default(cuid())
-  pageId     String
-  version    Int       // Version number (1, 2, 3, etc.)
-  content    String    // Generated content (HTML or markdown)
-  reason     String    // Reason for this version (e.g., "initial_creation")
+  id          String    @id @default(cuid())
+  pageId      String
+  version     Int // Version number (1, 2, 3, etc.)
+  content     String // Generated content (HTML or markdown)
+  reason      String // Reason for this version (e.g., "initial_creation")
   publishedAt DateTime? // When this version was published to Shopify
-  createdAt  DateTime  @default(now())
+  createdAt   DateTime  @default(now())
 
   // Relations
   page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
@@ -310,14 +332,14 @@ model ContentVersion {
 // - date: The date this snapshot was taken
 // - Allows tracking SEO performance trends and keyword rankings
 model PerformanceSnapshot {
-  id         String   @id @default(cuid())
-  pageId     String
-  keyword    String   // Search query/keyword
-  impressions Int     // Number of impressions
-  clicks     Int     // Number of clicks
-  position   Float    // Average position (can be decimal)
-  date       DateTime // Date of the snapshot
-  createdAt  DateTime @default(now())
+  id          String   @id @default(cuid())
+  pageId      String
+  keyword     String // Search query/keyword
+  impressions Int // Number of impressions
+  clicks      Int // Number of clicks
+  position    Float // Average position (can be decimal)
+  date        DateTime // Date of the snapshot
+  createdAt   DateTime @default(now())
 
   // Relations
   page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
@@ -326,4 +348,31 @@ model PerformanceSnapshot {
   @@index([pageId, date])
   @@index([date])
   @@map("performance_snapshots")
+}
+
+// ChangeIntent: Tracks SEO change intents for pages
+// Why: Track intended SEO changes (meta updates, internal links, schema injection) before application
+// - intentType: Type of change (UPDATE_META, ADD_INTERNAL_LINK, INJECT_SCHEMA)
+// - payload: JSON field for flexible change data
+// - status: Current state (PENDING, APPLIED, FAILED, ROLLED_BACK)
+// - appliedAt: When the change was applied (null if not yet applied)
+// - Allows tracking and rolling back SEO changes
+model ChangeIntent {
+  id         String             @id @default(uuid())
+  siteId     String
+  pageId     String
+  intentType ChangeIntentType
+  payload    Json // JSON field for flexible change data
+  status     ChangeIntentStatus @default(PENDING)
+  createdAt  DateTime           @default(now())
+  appliedAt  DateTime? // When the change was applied (null if not yet applied)
+
+  // Relations
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, status])
+  @@index([pageId, status])
+  @@index([status])
+  @@map("change_intents")
 }
