@@ -54,6 +54,16 @@ export default function LandingPage({
             <p className="text-sm text-muted-foreground">
               Works entirely inside Shopify Admin. No external accounts required.
             </p>
+            
+            {/* Development/Testing: Direct link to dashboard */}
+            <div className="pt-4">
+              <a
+                href="/dashboard"
+                className="inline-block px-6 py-3 bg-secondary text-secondary-foreground text-base font-medium rounded-lg hover:bg-secondary/80 transition-colors border border-border"
+              >
+                Go to Dashboard (Testing)
+              </a>
+            </div>
           </div>
         </div>
       </section>
