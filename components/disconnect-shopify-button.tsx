@@ -25,7 +25,7 @@ export function DisconnectShopifyButton() {
       return
     }
 
-    if (!confirm('Are you sure you want to disconnect your Shopify store? You will need to reconnect to use Shopify features.')) {
+    if (!confirm('Are you sure you want to disconnect your site? You will need to reconnect to use site features.')) {
       return
     }
 
@@ -41,7 +41,7 @@ export function DisconnectShopifyButton() {
       const data = await response.json()
 
       if (!response.ok) {
-        setError(data.error || data.message || 'Failed to disconnect Shopify store')
+        setError(data.error || data.message || 'Failed to disconnect site')
         return
       }
 
@@ -65,7 +65,7 @@ export function DisconnectShopifyButton() {
         disabled={isLoading || success || !isInitialized}
         className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
       >
-        {isLoading ? 'Disconnecting...' : success ? 'Disconnected! Redirecting...' : !isInitialized ? 'Initializing...' : 'Disconnect Shopify Store'}
+        {isLoading ? 'Disconnecting...' : success ? 'Disconnected! Redirecting...' : !isInitialized ? 'Initializing...' : 'Disconnect Site'}
       </button>
 
       {error && (

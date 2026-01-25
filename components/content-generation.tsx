@@ -179,7 +179,7 @@ export function ContentGeneration() {
         return
       }
 
-      // Publish to Shopify
+      // Publish content
       const publishResponse = await fetchWithAuth('/api/content/publish', {
         method: 'POST',
         headers: {
@@ -195,12 +195,12 @@ export function ContentGeneration() {
       if (publishResponse.ok && publishData.success) {
         setPublishResult({
           success: true,
-          message: publishData.message || 'Content published successfully to Shopify!',
+          message: publishData.message || 'Content published successfully!',
         })
       } else {
         setPublishResult({
           success: false,
-          error: publishData.error || publishData.message || 'Failed to publish to Shopify',
+          error: publishData.error || publishData.message || 'Failed to publish content',
         })
       }
     } catch (err) {
@@ -284,7 +284,7 @@ export function ContentGeneration() {
           disabled={publishing || generatingKeywords || !selectedPostId || keywords.length === 0}
           className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {publishing ? 'Publishing...' : 'Publish to Shopify'}
+          {publishing ? 'Publishing...' : 'Publish'}
         </button>
       </div>
 

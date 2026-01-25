@@ -2,15 +2,28 @@
 
 import { useState } from "react"
 import { useAuthenticatedFetch } from "@/lib/use-authenticated-fetch"
+import { useWordPressFetch } from "@/lib/use-wordpress-fetch"
 import { useDashboardInitialized } from "@/components/dashboard-status-check"
-import { DISABLE_CONTENT_GENERATION_UI } from "@/lib/feature-flags"
 
-export function SyncBaselineButton() {
+export function SyncBaselineButton({ cmsType = 'SHOPIFY' }: { cmsType?: 'SHOPIFY' | 'WORDPRESS' }) {
   const [isLoading, setIsLoading] = useState(false)
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
-  const fetchWithAuth = useAuthenticatedFetch()
+  
+  // Conditionally use fetch functions based on CMS type
+  // WordPress doesn't require App Bridge initialization
+  // Note: Hooks must be called unconditionally, but we only use the appropriate one
+  const shopifyFetch = useAuthenticatedFetch() // Only used when cmsType === 'SHOPIFY'
+  const wordpressFetch = useWordPressFetch() // Only used when cmsType === 'WORDPRESS'
+  const fetchWithAuth = cmsType === 'WORDPRESS' ? wordpressFetch : shopifyFetch
+  
+  // Only check initialization for Shopify (requires App Bridge)
+  // For WordPress, this hook is called but result is ignored
   const isInitialized = useDashboardInitialized()
+  
+  // For WordPress, we don't need to wait for App Bridge initialization
+  // For Shopify, we need App Bridge to be initialized
+  const canProceed = cmsType === 'WORDPRESS' ? true : isInitialized
 
   const handleSync = async () => {
     // Guard: Only run on client
@@ -18,8 +31,9 @@ export function SyncBaselineButton() {
       return
     }
 
-    // Guard: Wait for initial authenticated request to complete
-    if (!isInitialized) {
+    // Guard: Wait for initial authenticated request to complete (Shopify only)
+    // WordPress doesn't require App Bridge initialization
+    if (!canProceed) {
       setError('Dashboard is still initializing. Please wait a moment and try again.')
       return
     }
@@ -29,16 +43,15 @@ export function SyncBaselineButton() {
     setResult(null)
 
     try {
-      // When feature flag is enabled, trigger SEO run instead of baseline sync
-      const endpoint = DISABLE_CONTENT_GENERATION_UI ? '/api/seo/run' : '/api/store/baseline'
-      const response = await fetchWithAuth(endpoint, {
+      // Always call SEO run endpoint - backend handles CMS-specific routing
+      const response = await fetchWithAuth('/api/seo/run', {
         method: 'POST',
       })
 
       const data = await response.json()
 
       if (!response.ok) {
-        const errorMsg = data.message || data.error || 'Failed to run operation'
+        const errorMsg = data.message || data.error || 'Failed to run SEO changes'
         setError(`${errorMsg}${data.message && data.message !== data.error ? ` (${data.error})` : ''}`)
         return
       }
@@ -51,18 +64,18 @@ export function SyncBaselineButton() {
     }
   }
 
-  // Determine button text based on feature flag
+  // Determine button text
   const getButtonText = () => {
-    if (!isInitialized) return 'Initializing...'
-    if (isLoading) return DISABLE_CONTENT_GENERATION_UI ? 'Running SEO...' : 'Syncing...'
-    return DISABLE_CONTENT_GENERATION_UI ? 'Run SEO Changes' : 'Sync Store Content'
+    if (!canProceed) return 'Initializing...'
+    if (isLoading) return 'Running SEO...'
+    return 'Run SEO Changes'
   }
 
   return (
     <div className="space-y-4">
       <button
         onClick={handleSync}
-        disabled={isLoading || !isInitialized}
+        disabled={isLoading || !canProceed}
         className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {getButtonText()}
@@ -78,31 +91,22 @@ export function SyncBaselineButton() {
 
       {result && (
         <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
-          <p className="text-green-800 dark:text-green-200 font-semibold mb-2">
-            ✅ {DISABLE_CONTENT_GENERATION_UI ? 'SEO Run Complete!' : 'Sync Complete!'}
-          </p>
-          {DISABLE_CONTENT_GENERATION_UI ? (
-            <div className="text-sm text-green-700 dark:text-green-300 space-y-1">
-              <p><strong>Generated:</strong> {result.counts?.UPDATE_META || 0} meta, {result.counts?.ADD_INTERNAL_LINK || 0} internal links, {result.counts?.INJECT_SCHEMA || 0} schema</p>
-              <p><strong>Applied:</strong> {result.applied?.UPDATE_META || 0} meta, {result.applied?.ADD_INTERNAL_LINK || 0} internal links, {result.applied?.INJECT_SCHEMA || 0} schema</p>
-              <p><strong>Failed:</strong> {result.failed?.UPDATE_META || 0} meta, {result.failed?.ADD_INTERNAL_LINK || 0} internal links, {result.failed?.INJECT_SCHEMA || 0} schema</p>
-              <p><strong>Total Pages:</strong> {result.totalPages || 0}</p>
-            </div>
-          ) : (
-            <div className="text-sm text-green-700 dark:text-green-300 space-y-1">
-              <p><strong>Synced:</strong> {result.synced?.products || 0} products, {result.synced?.collections || 0} collections, {result.synced?.articles || 0} articles</p>
-              <p><strong>Stored in DB:</strong> {result.stored?.PRODUCT || 0} products, {result.stored?.COLLECTION || 0} collections, {result.stored?.ARTICLE || 0} articles</p>
-              <p><strong>Total:</strong> {result.total || 0} pages</p>
-            </div>
-          )}
-          <details className="mt-2">
-            <summary className="text-xs cursor-pointer text-green-600 dark:text-green-400">
-              View full response
-            </summary>
-            <pre className="mt-2 text-xs bg-white dark:bg-gray-900 p-2 rounded overflow-auto">
-              {JSON.stringify(result, null, 2)}
-            </pre>
-          </details>
+          <p className="text-green-800 dark:text-green-200 mb-2">SEO Run Complete</p>
+          <div className="text-sm text-green-700 dark:text-green-300 whitespace-pre-line">
+            <p>Generated:</p>
+            <p>  Meta: {result.counts?.UPDATE_META || 0}</p>
+            <p>  Links: {result.counts?.ADD_INTERNAL_LINK || 0}</p>
+            <p>  Schema: {result.counts?.INJECT_SCHEMA || 0}</p>
+            <p>Applied:</p>
+            <p>  Meta: {result.applied?.UPDATE_META || 0}</p>
+            <p>  Links: {result.applied?.ADD_INTERNAL_LINK || 0}</p>
+            <p>  Schema: {result.applied?.INJECT_SCHEMA || 0}</p>
+            <p>Failed:</p>
+            <p>  Meta: {result.failed?.UPDATE_META || 0}</p>
+            <p>  Links: {result.failed?.ADD_INTERNAL_LINK || 0}</p>
+            <p>  Schema: {result.failed?.INJECT_SCHEMA || 0}</p>
+            <p>Total Pages: {result.totalPages || 0}</p>
+          </div>
         </div>
       )}
     </div>
