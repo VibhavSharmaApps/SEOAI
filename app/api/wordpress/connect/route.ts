@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { encryptToken } from '@/lib/shopify-oauth'
-import { getSiteFromSession, ShopifySessionTokenError } from '@/lib/get-site-from-session'
 import { testWordPressConnection } from '@/lib/wordpress-api'
 
 export const dynamic = 'force-dynamic'
 
 /**
  * POST /api/wordpress/connect
- * Connects a WordPress site by storing credentials
+ * Public endpoint to connect a WordPress site
+ * Does NOT require Shopify session token authentication
  * 
  * Body:
  * - siteUrl: WordPress site URL
@@ -17,20 +17,6 @@ export const dynamic = 'force-dynamic'
  */
 export async function POST(request: Request) {
   try {
-    // Verify Shopify session token and get site
-    let siteData
-    try {
-      siteData = await getSiteFromSession(request)
-    } catch (error) {
-      if (error instanceof ShopifySessionTokenError) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: error.statusCode }
-        )
-      }
-      throw error
-    }
-
     const body = await request.json()
     const { siteUrl, username, applicationPassword } = body
 
@@ -42,10 +28,22 @@ export async function POST(request: Request) {
       )
     }
 
-    // Test WordPress connection
+    // Normalize site URL
+    const normalizedSiteUrl = siteUrl.replace(/\/$/, '') // Remove trailing slash
+    let siteDomain: string
+    try {
+      siteDomain = new URL(normalizedSiteUrl).hostname
+    } catch (urlError) {
+      return NextResponse.json(
+        { error: 'Invalid site URL format' },
+        { status: 400 }
+      )
+    }
+
+    // Test WordPress connection by making an authenticated request to /wp-json/wp/v2/posts
     try {
       const testResult = await testWordPressConnection({
-        siteUrl,
+        siteUrl: normalizedSiteUrl,
         username,
         applicationPassword,
       })
@@ -66,29 +64,32 @@ export async function POST(request: Request) {
     // Encrypt application password (reuse Shopify encryption for consistency)
     const encryptedPassword = encryptToken(applicationPassword)
 
-    // Update site with WordPress credentials
-    // For now, we'll store WordPress site URL in domain and shopifyStoreUrl fields
-    // and use shopifyAccessToken to store encrypted application password
-    // This is a temporary solution until dedicated WordPress fields are added
-    const normalizedSiteUrl = siteUrl.replace(/\/$/, '') // Remove trailing slash
-    const siteDomain = new URL(normalizedSiteUrl).hostname // Extract domain from URL
-
-    const updatedSite = await prisma.site.update({
-      where: { id: siteData.site.id },
-      data: {
+    // Create or update Site record with WordPress credentials
+    // Use upsert to handle both new connections and updates
+    const site = await prisma.site.upsert({
+      where: { domain: siteDomain },
+      update: {
+        cmsType: 'WORDPRESS',
+        shopifyStoreUrl: normalizedSiteUrl, // Reuse this field for WordPress site URL
+        shopifyAccessToken: encryptedPassword, // Reuse this field for encrypted application password
+        name: username, // Store username in name field
+        isActive: true,
+      },
+      create: {
         cmsType: 'WORDPRESS',
         domain: siteDomain,
         shopifyStoreUrl: normalizedSiteUrl, // Reuse this field for WordPress site URL
         shopifyAccessToken: encryptedPassword, // Reuse this field for encrypted application password
-        // Store username in name field temporarily (or we can add a dedicated field later)
-        name: username,
+        name: username, // Store username in name field
+        isActive: true,
+        type: 'SHOPIFY', // Required field, but not used for WordPress
       },
     })
 
     return NextResponse.json({
       success: true,
       message: 'WordPress site connected successfully',
-      siteId: updatedSite.id,
+      siteId: site.id,
     })
   } catch (error) {
     console.error('[WordPress Connect] Error:', error)

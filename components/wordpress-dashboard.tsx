@@ -53,15 +53,24 @@ export function WordPressDashboard() {
   const loadStatus = async () => {
     setLoadingStatus(true)
     try {
-      const response = await fetchWithAuth('/api/wordpress/status')
-      const data = await response.json()
-      if (response.ok) {
-        setStatus(data)
-      } else {
-        console.error('Failed to load status:', data.error)
+      // WordPress status endpoint still requires auth, but connect endpoint is public
+      // For now, we'll skip status check if fetch fails (for MVP testing)
+      try {
+        const response = await fetchWithAuth('/api/wordpress/status')
+        const data = await response.json()
+        if (response.ok) {
+          setStatus(data)
+        } else {
+          // If status check fails, assume not connected
+          setStatus({ connected: false, cmsType: 'WORDPRESS', siteUrl: null, domain: null })
+        }
+      } catch (statusError) {
+        // If status endpoint fails (e.g., no auth), assume not connected
+        setStatus({ connected: false, cmsType: 'WORDPRESS', siteUrl: null, domain: null })
       }
     } catch (err) {
       console.error('Error loading status:', err)
+      setStatus({ connected: false, cmsType: 'WORDPRESS', siteUrl: null, domain: null })
     } finally {
       setLoadingStatus(false)
     }
@@ -79,7 +88,8 @@ export function WordPressDashboard() {
     setConnectError(null)
 
     try {
-      const response = await fetchWithAuth('/api/wordpress/connect', {
+      // WordPress connect endpoint is now public - no auth required
+      const response = await fetch('/api/wordpress/connect', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
