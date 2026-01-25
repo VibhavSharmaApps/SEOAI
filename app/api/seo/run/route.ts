@@ -18,38 +18,98 @@ export const dynamic = 'force-dynamic'
  * Runs SEO change intent generation and application for all pages
  * 
  * This endpoint:
- * 1. Verifies Shopify session token
- * 2. Loads all Pages for the authenticated Site
- * 3. Detects site.cmsType (SHOPIFY or WORDPRESS)
- * 4. Runs meta, internal link, and schema rule functions
- * 5. Stores generated ChangeIntents in the database
- * 6. Routes ChangeIntents to the correct adapter based on cmsType
- * 7. Applies each intent using the appropriate adapter
- * 8. Updates intent status and appliedAt
- * 9. Returns counts per intent type
+ * 1. Determines site by CMS type:
+ *    - WORDPRESS: Queries database directly (no auth required)
+ *    - SHOPIFY: Verifies Shopify session token (auth required)
+ * 2. Loads all Pages for the Site
+ * 3. Runs meta, internal link, and schema rule functions
+ * 4. Stores generated ChangeIntents in the database
+ * 5. Routes ChangeIntents to the correct adapter based on cmsType
+ * 6. Applies each intent using the appropriate adapter
+ * 7. Updates intent status and appliedAt
+ * 8. Returns counts per intent type
  * 
  * Note: All CMS-specific logic is contained within adapters.
  * The orchestrator only routes to the correct adapter based on cmsType.
  */
 export async function POST(request: Request) {
   try {
-    // 1. Verify Shopify session token and get site
-    let siteData
-    try {
-      siteData = await getSiteFromSession(request)
-    } catch (error) {
-      if (error instanceof ShopifySessionTokenError) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: error.statusCode }
-        )
+    // 1. Determine site by CMS type
+    // First, check if there's an active WordPress site (no auth required)
+    let site: {
+      id: string
+      domain: string
+      shopifyStoreUrl: string
+      shopifyAccessToken: string | null
+      cmsType: 'SHOPIFY' | 'WORDPRESS'
+      isActive: boolean
+      name: string | null
+    } | null = null
+
+    const wordPressSite = await prisma.site.findFirst({
+      where: {
+        cmsType: 'WORDPRESS',
+        isActive: true,
+      },
+      select: {
+        id: true,
+        domain: true,
+        shopifyStoreUrl: true, // Stores WordPress site URL
+        shopifyAccessToken: true, // Stores encrypted WordPress application password
+        cmsType: true,
+        isActive: true,
+        name: true, // Stores WordPress username
+      },
+    })
+
+    if (wordPressSite) {
+      // WordPress site found - use it without Shopify auth
+      site = {
+        id: wordPressSite.id,
+        domain: wordPressSite.domain,
+        shopifyStoreUrl: wordPressSite.shopifyStoreUrl,
+        shopifyAccessToken: wordPressSite.shopifyAccessToken,
+        cmsType: wordPressSite.cmsType,
+        isActive: wordPressSite.isActive,
+        name: wordPressSite.name,
       }
-      throw error
+      console.log(`[SEO Run] WordPress site found: ${site.id}, skipping Shopify auth`)
+    } else {
+      // No WordPress site found - use Shopify auth (existing logic)
+      let siteData
+      try {
+        siteData = await getSiteFromSession(request)
+      } catch (error) {
+        if (error instanceof ShopifySessionTokenError) {
+          return NextResponse.json(
+            { error: error.message },
+            { status: error.statusCode }
+          )
+        }
+        throw error
+      }
+      site = {
+        id: siteData.site.id,
+        domain: siteData.site.domain,
+        shopifyStoreUrl: siteData.site.shopifyStoreUrl,
+        shopifyAccessToken: siteData.site.shopifyAccessToken,
+        cmsType: siteData.site.cmsType,
+        isActive: siteData.site.isActive,
+        name: null,
+      }
+      console.log(`[SEO Run] Shopify site found: ${site.id}, using Shopify auth`)
     }
 
-    // 2. Load all Pages for the authenticated Site with changeIntents relation
+    if (!site) {
+      return NextResponse.json(
+        { error: 'No active site found' },
+        { status: 404 }
+      )
+    }
+
+    // 2. Load all Pages for the Site with changeIntents relation
     const pages = await prisma.page.findMany({
-      where: { siteId: siteData.site.id },
+      where: { siteId: site.id },
       include: {
         changeIntents: {
           select: {
@@ -82,7 +142,7 @@ export async function POST(request: Request) {
       })
     }
 
-    console.log(`[SEO Run] Processing ${pages.length} pages for site ${siteData.site.id}`)
+    console.log(`[SEO Run] Processing ${pages.length} pages for site ${site.id}`)
 
     // 3. Run meta, internal link, and schema rule functions
 
@@ -125,7 +185,7 @@ export async function POST(request: Request) {
     for (const { page, intent } of metaIntents) {
       const created = await prisma.changeIntent.create({
         data: {
-          siteId: siteData.site.id,
+          siteId: site.id,
           pageId: page.id,
           intentType: IntentType.UPDATE_META,
           payload: intent.payload,
@@ -143,7 +203,7 @@ export async function POST(request: Request) {
     for (const intent of internalLinkIntents) {
       const created = await prisma.changeIntent.create({
         data: {
-          siteId: siteData.site.id,
+          siteId: site.id,
           pageId: intent.payload.pageId,
           intentType: IntentType.ADD_INTERNAL_LINK,
           payload: intent.payload,
@@ -161,7 +221,7 @@ export async function POST(request: Request) {
     for (const { page, intent } of schemaIntents) {
       const created = await prisma.changeIntent.create({
         data: {
-          siteId: siteData.site.id,
+          siteId: site.id,
           pageId: page.id,
           intentType: IntentType.INJECT_SCHEMA,
           payload: intent.payload,
@@ -178,49 +238,45 @@ export async function POST(request: Request) {
     console.log(`[SEO Run] Stored ${createdIntents.length} change intents in database`)
 
     // 5. Apply each intent using the correct adapter based on CMS type
-    // Load full site to get cmsType
-    const fullSite = await prisma.site.findUnique({
-      where: { id: siteData.site.id },
-      select: { cmsType: true },
-    })
-
-    if (!fullSite) {
-      return NextResponse.json(
-        { error: 'Site not found' },
-        { status: 404 }
-      )
-    }
-
-    const cmsType = fullSite.cmsType
+    const cmsType = site.cmsType
 
     // Create adapter context and function based on CMS type
-    // Use a wrapper function to handle type differences
     let applyIntentFunction: (intent: any) => Promise<Record<string, any>>
 
     if (cmsType === 'SHOPIFY') {
-      const decryptedToken = decryptToken(siteData.site.shopifyAccessToken)
+      // Shopify mode: Use Shopify auth and credentials
+      if (!site.shopifyAccessToken) {
+        return NextResponse.json(
+          { error: 'Shopify access token not found for this shop' },
+          { status: 400 }
+        )
+      }
+      const decryptedToken = decryptToken(site.shopifyAccessToken)
       const adapterContext: ShopifyAdapterContext = {
-        shop: siteData.site.domain,
+        shop: site.domain,
         accessToken: decryptedToken,
       }
       applyIntentFunction = (intent) => applyShopifyIntent(intent, adapterContext)
-      console.log(`[SEO Run] Using Shopify adapter for site ${siteData.site.id}`)
+      console.log(`[SEO Run] Using Shopify adapter for site ${site.id}`)
     } else if (cmsType === 'WORDPRESS') {
-      // TODO: Get WordPress credentials from site or environment
-      // For now, this will need to be configured per site
-      // WordPress sites need: siteUrl, username, applicationPassword
-      return NextResponse.json(
-        { error: 'WordPress adapter context not yet configured. WordPress credentials must be stored in Site model.' },
-        { status: 400 }
-      )
-      
-      // Example (commented out until WordPress credentials are stored):
-      // const adapterContext: WordPressAdapterContext = {
-      //   siteUrl: site.wordpressSiteUrl || '',
-      //   username: site.wordpressUsername || '',
-      //   applicationPassword: decryptToken(site.wordpressApplicationPassword || ''),
-      // }
-      // applyIntentFunction = (intent) => applyWordPressIntent(intent, adapterContext)
+      // WordPress mode: Use stored WordPress credentials (no Shopify auth)
+      if (!site.shopifyAccessToken || !site.shopifyStoreUrl || !site.name) {
+        return NextResponse.json(
+          { error: 'WordPress credentials not found. Please connect your WordPress site first.' },
+          { status: 400 }
+        )
+      }
+      // Decrypt WordPress application password (stored in shopifyAccessToken field)
+      const decryptedPassword = decryptToken(site.shopifyAccessToken)
+      // WordPress site URL is stored in shopifyStoreUrl field
+      // WordPress username is stored in name field
+      const adapterContext: WordPressAdapterContext = {
+        siteUrl: site.shopifyStoreUrl,
+        username: site.name,
+        applicationPassword: decryptedPassword,
+      }
+      applyIntentFunction = (intent) => applyWordPressIntent(intent, adapterContext)
+      console.log(`[SEO Run] Using WordPress adapter for site ${site.id}`)
     } else {
       return NextResponse.json(
         { error: `Unsupported CMS type: ${cmsType}` },

@@ -5,7 +5,7 @@ import { useWordPressFetch } from '@/lib/use-wordpress-fetch'
 
 interface WordPressStatus {
   connected: boolean
-  cmsType: string
+  cmsType: string | null
   siteUrl: string | null
   domain: string | null
 }
@@ -53,24 +53,24 @@ export function WordPressDashboard() {
   const loadStatus = async () => {
     setLoadingStatus(true)
     try {
-      // WordPress status endpoint still requires auth, but connect endpoint is public
-      // For now, we'll skip status check if fetch fails (for MVP testing)
-      try {
-        const response = await fetchWithAuth('/api/wordpress/status')
-        const data = await response.json()
-        if (response.ok) {
-          setStatus(data)
-        } else {
-          // If status check fails, assume not connected
-          setStatus({ connected: false, cmsType: 'WORDPRESS', siteUrl: null, domain: null })
-        }
-      } catch (statusError) {
-        // If status endpoint fails (e.g., no auth), assume not connected
-        setStatus({ connected: false, cmsType: 'WORDPRESS', siteUrl: null, domain: null })
+      // WordPress status endpoint is now public - no auth required
+      const response = await fetch('/api/wordpress/status')
+      const data = await response.json()
+      if (response.ok) {
+        // Use cmsType from database response, or default to null if not provided
+        setStatus({
+          connected: data.connected || false,
+          cmsType: data.cmsType || null,
+          siteUrl: data.siteUrl || null,
+          domain: null, // Not returned by status endpoint
+        })
+      } else {
+        // If status check fails, assume not connected
+        setStatus({ connected: false, cmsType: null, siteUrl: null, domain: null })
       }
     } catch (err) {
       console.error('Error loading status:', err)
-      setStatus({ connected: false, cmsType: 'WORDPRESS', siteUrl: null, domain: null })
+      setStatus({ connected: false, cmsType: null, siteUrl: null, domain: null })
     } finally {
       setLoadingStatus(false)
     }
@@ -158,7 +158,7 @@ export function WordPressDashboard() {
         <h2 className="text-2xl font-bold mb-2">WordPress MVP Testing Console</h2>
         <div className="space-y-1 text-sm">
           <div>
-            <strong>CMS Type:</strong> {status?.cmsType || 'Not set'}
+            <strong>CMS Type:</strong> {status?.cmsType === 'WORDPRESS' ? 'WordPress' : status?.cmsType || 'Not set'}
           </div>
           <div>
             <strong>Site URL:</strong> {status?.siteUrl || 'Not connected'}

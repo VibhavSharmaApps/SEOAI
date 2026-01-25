@@ -21,15 +21,17 @@ export async function GET(request: Request) {
         isActive: true,
       },
       select: {
+        cmsType: true,
         shopifyStoreUrl: true, // Reused field that stores WordPress site URL
       },
     })
 
-    // If an active WordPress site exists, return connected status
+    // If an active WordPress site exists, return connected status with cmsType
     if (wordPressSite && wordPressSite.shopifyStoreUrl) {
       return NextResponse.json({
         connected: true,
         siteUrl: wordPressSite.shopifyStoreUrl,
+        cmsType: wordPressSite.cmsType,
       }, { status: 200 })
     }
 
