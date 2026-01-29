@@ -116,13 +116,15 @@ function countExistingInternalLinkIntents(page: Page & { changeIntents?: Array<{
  *                            If not provided, assumes 0 existing intents
  * @param htmlContentMap - Optional map of pageId -> HTML content for WordPress pages
  * @param cmsType - CMS type ('SHOPIFY' or 'WORDPRESS')
- * @returns Array of InternalLinkChangeIntent objects (max 1-2 per article)
+ * @param appliedIntentsByPage - Optional map of pageId -> Set of applied intent types (for idempotency)
+ * @returns Array of InternalLinkChangeIntent objects (max 1-2 per article, 1 for WordPress)
  */
 export async function generateInternalLinkChangeIntents(
   pages: (Page & { changeIntents?: Array<{ intentType: string }> })[],
   existingIntentsMap?: Map<string, number>,
   htmlContentMap?: Map<string, string>,
-  cmsType?: 'SHOPIFY' | 'WORDPRESS'
+  cmsType?: 'SHOPIFY' | 'WORDPRESS',
+  appliedIntentsByPage?: Map<string, Set<string>>
 ): Promise<InternalLinkChangeIntent[]> {
   const intents: InternalLinkChangeIntent[] = []
 
@@ -135,20 +137,52 @@ export async function generateInternalLinkChangeIntents(
 
   // Process each article
   for (const article of articlePages) {
-    // For WordPress, check HTML for existing internal links
+    // Check if ADD_INTERNAL_LINK intent already applied (idempotency)
+    const appliedTypes = appliedIntentsByPage?.get(article.id)
+    if (appliedTypes?.has('ADD_INTERNAL_LINK')) {
+      // Intent already applied - skip (idempotency: second run generates zero intents)
+      continue
+    }
+    
+    // For WordPress, check HTML for contextual internal links - STRICT ESCALATION RULES
     if (cmsType === 'WORDPRESS' && htmlContentMap) {
       const htmlContent = htmlContentMap.get(article.id)
       if (htmlContent) {
-        const { countInternalLinks } = await import('./wordpress-html-detection')
-        const existingLinkCount = countInternalLinks(htmlContent, article.url)
+        const { countContextualInternalLinks } = await import('./wordpress-html-detection')
+        const contextualLinkCount = countContextualInternalLinks(htmlContent, article.url)
         
-        // If page already has internal links, skip generating more
-        if (existingLinkCount > 0) {
+        // WordPress MVP Rule: Generate intent ONLY if ZERO contextual internal links exist
+        // If at least one contextual link exists, do nothing
+        if (contextualLinkCount > 0) {
+          // Page has contextual links - skip generating intent
           continue
         }
+        
+        // Zero contextual links - generate ONE intent (one intent per type per page per run)
+        // Find one suitable target page
+        const targetPages = findTargetPages(article, pages, 1)
+        if (targetPages.length > 0) {
+          const intent: InternalLinkChangeIntent = {
+            intentType: IntentType.ADD_INTERNAL_LINK,
+            payload: {
+              pageId: article.id,
+              pageType: article.type,
+              pageUrl: article.url,
+              targetPageId: targetPages[0].id,
+              targetPageUrl: targetPages[0].url,
+              targetPageTitle: targetPages[0].title,
+              anchorText: targetPages[0].title,
+              reason: `Add contextual internal link to improve SEO. Page has zero contextual internal links.`,
+            },
+          }
+          intents.push(intent)
+        }
+        // Continue to next article (WordPress MVP: one intent per page)
+        continue
       }
     }
     
+    // Shopify logic (unchanged)
     // Check existing internal link intents
     let existingCount = 0
     

@@ -165,10 +165,30 @@ export async function POST(request: Request) {
     }
 
     // 4. Run meta, internal link, and schema rule functions
+    // WordPress MVP: Check for existing APPLIED intents to ensure idempotency
+    // After applying fixes once, a second SEO run must generate zero intents
 
-    // Generate meta change intents (one per page)
+    // Build map of existing APPLIED intents per page per type (for idempotency)
+    const appliedIntentsByPage = new Map<string, Set<string>>()
+    for (const page of pages) {
+      const appliedTypes = new Set<string>()
+      for (const intent of page.changeIntents) {
+        if (intent.status === 'APPLIED') {
+          appliedTypes.add(intent.intentType)
+        }
+      }
+      appliedIntentsByPage.set(page.id, appliedTypes)
+    }
+
+    // Generate meta change intents (one per page, one per type per page per run)
     const metaIntents: Array<{ page: typeof pages[0]; intent: NonNullable<Awaited<ReturnType<typeof generateMetaChangeIntent>>> }> = []
     for (const page of pages) {
+      // Skip if UPDATE_META intent already applied (idempotency)
+      const appliedTypes = appliedIntentsByPage.get(page.id)
+      if (appliedTypes?.has('UPDATE_META')) {
+        continue
+      }
+      
       const htmlContent = htmlContentMap.get(page.id)
       const intent = await generateMetaChangeIntent(page, htmlContent, cmsType)
       if (intent) {
@@ -186,16 +206,24 @@ export async function POST(request: Request) {
     }
 
     // Generate internal link change intents (for ARTICLE pages only)
+    // Note: WordPress logic inside this function checks for applied intents
     const internalLinkIntents = await generateInternalLinkChangeIntents(
       pages,
       existingIntentsMap,
       htmlContentMap,
-      cmsType
+      cmsType,
+      appliedIntentsByPage
     )
 
-    // Generate schema change intents (one per page)
+    // Generate schema change intents (one per page, one per type per page per run)
     const schemaIntents: Array<{ page: typeof pages[0]; intent: NonNullable<Awaited<ReturnType<typeof generateSchemaChangeIntent>>> }> = []
     for (const page of pages) {
+      // Skip if INJECT_SCHEMA intent already applied (idempotency)
+      const appliedTypes = appliedIntentsByPage.get(page.id)
+      if (appliedTypes?.has('INJECT_SCHEMA')) {
+        continue
+      }
+      
       const htmlContent = htmlContentMap.get(page.id)
       const intent = await generateSchemaChangeIntent(page, htmlContent, cmsType)
       if (intent) {

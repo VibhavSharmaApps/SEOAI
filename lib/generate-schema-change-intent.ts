@@ -123,13 +123,34 @@ export async function generateSchemaChangeIntent(
     return null
   }
 
-  // For WordPress, check HTML for existing schema
+  // For WordPress, check HTML for existing schema - STRICT ESCALATION RULES
   if (cmsType === 'WORDPRESS' && htmlContent) {
-    const { hasSchemaMarkup } = await import('./wordpress-html-detection')
-    if (hasSchemaMarkup(htmlContent)) {
-      // Schema already exists in HTML - do not override
-      return null
+    const { getSchemaType } = await import('./wordpress-html-detection')
+    const existingSchemaType = getSchemaType(htmlContent)
+    
+    // WordPress MVP Rule: Generate intent if:
+    // - No schema exists OR
+    // - Existing schema is not Article or BlogPosting (for ARTICLE pages)
+    if (existingSchemaType) {
+      // Schema exists - check if it's the correct type
+      if (page.type === 'ARTICLE') {
+        // For articles, only Article or BlogPosting are acceptable
+        if (existingSchemaType === 'Article' || existingSchemaType === 'BlogPosting') {
+          // Correct schema type exists - do not generate intent
+          return null
+        }
+        // Wrong schema type - generate intent to inject correct schema
+      } else if (page.type === 'PRODUCT') {
+        // For products, only Product schema is acceptable
+        if (existingSchemaType === 'Product') {
+          // Correct schema type exists - do not generate intent
+          return null
+        }
+        // Wrong schema type - generate intent to inject correct schema
+      }
+      // If we reach here, schema exists but is wrong type - generate intent
     }
+    // If no schema exists, generate intent (fall through)
   } else {
     // For Shopify, check if schema already exists via change intents - do not override
     if (hasExistingSchema(page)) {

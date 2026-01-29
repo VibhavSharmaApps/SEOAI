@@ -43,6 +43,16 @@ const WEAK_TITLE_PATTERNS = [
 ]
 
 /**
+ * WordPress-specific generic title patterns
+ * These indicate auto-generated or weak titles that should be improved
+ */
+const WORDPRESS_WEAK_TITLE_PATTERNS = [
+  /^.+?\s*[–—]\s*.+$/i, // "Post Title – Site Name" or "Post Title — Site Name"
+  /^.+?\s*\|\s*.+$/i, // "Site Name | Post Title"
+  /^.+?\s*-\s*.+$/i, // "Post Title - Site Name" (with dash)
+]
+
+/**
  * Interface for the ChangeIntent object structure
  * This matches the Prisma ChangeIntent model but without database fields
  */
@@ -66,7 +76,7 @@ export interface MetaChangeIntent {
 }
 
 /**
- * Checks if a title is generic or weak
+ * Checks if a title is generic or weak (for Shopify)
  */
 function isWeakTitle(title: string): boolean {
   const trimmed = title.trim()
@@ -79,6 +89,35 @@ function isWeakTitle(title: string): boolean {
   }
   
   // Check if title is too short (likely generic)
+  if (trimmed.length < MIN_TITLE_LENGTH) {
+    return true
+  }
+  
+  return false
+}
+
+/**
+ * Checks if a WordPress title is generic or auto-generated
+ * Stricter rules for WordPress MVP
+ */
+function isWordPressWeakTitle(title: string): boolean {
+  const trimmed = title.trim()
+  
+  // Check against WordPress-specific weak patterns (auto-generated formats)
+  for (const pattern of WORDPRESS_WEAK_TITLE_PATTERNS) {
+    if (pattern.test(trimmed)) {
+      return true
+    }
+  }
+  
+  // Check against general weak patterns
+  for (const pattern of WEAK_TITLE_PATTERNS) {
+    if (pattern.test(trimmed)) {
+      return true
+    }
+  }
+  
+  // Check if title is too short (violation for WordPress MVP)
   if (trimmed.length < MIN_TITLE_LENGTH) {
     return true
   }
@@ -121,13 +160,13 @@ export async function generateMetaChangeIntent(
   const issues: MetaChangeIntent['payload']['issues'] = {}
   let hasIssues = false
   
-  // For WordPress, use HTML content if provided
+  // For WordPress, use HTML content if provided - STRICT ESCALATION RULES
   if (cmsType === 'WORDPRESS' && htmlContent) {
     const { extractMetaTitle, extractMetaDescription } = await import('./wordpress-html-detection')
     const metaTitle = extractMetaTitle(htmlContent)
     const metaDescription = extractMetaDescription(htmlContent)
     
-    // Check title from HTML
+    // WordPress MVP Rule: Generate intent if title is missing, too short, or matches generic patterns
     if (!metaTitle || metaTitle.length === 0) {
       issues.title = {
         missing: true,
@@ -137,20 +176,19 @@ export async function generateMetaChangeIntent(
     } else {
       const titleIssues: MetaChangeIntent['payload']['issues']['title'] = {}
       
-      // Check title length
+      // Check title length (too short is a violation)
       if (metaTitle.length < MIN_TITLE_LENGTH) {
         titleIssues.tooShort = true
         hasIssues = true
-      } else if (metaTitle.length > MAX_TITLE_LENGTH) {
-        titleIssues.tooLong = true
-        hasIssues = true
       }
       
-      // Check if title is generic/weak
-      if (isWeakTitle(metaTitle)) {
+      // Check if title matches WordPress generic/auto-generated patterns (violation)
+      if (isWordPressWeakTitle(metaTitle)) {
         titleIssues.generic = true
         hasIssues = true
       }
+      
+      // Note: We don't check for tooLong in WordPress MVP - only missing, too short, or generic
       
       if (Object.keys(titleIssues).length > 0) {
         titleIssues.currentValue = metaTitle
@@ -158,10 +196,9 @@ export async function generateMetaChangeIntent(
       }
     }
     
-    // Check meta description (only for WordPress)
+    // WordPress MVP Rule: Generate intent if meta description is missing
     if (!metaDescription || metaDescription.length === 0) {
-      // Meta description missing is an issue, but we don't have a field for it yet
-      // We can add it to recommendations
+      // Meta description missing is a violation - mark as issue
       hasIssues = true
     }
   } else {
