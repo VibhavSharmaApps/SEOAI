@@ -111,6 +111,12 @@ export async function POST(request: Request) {
     // 2. Get CMS type from site
     const cmsType = site.cmsType
 
+    // Log SEO run start to check if WordPress is being touched
+    console.log("SEO RUN START", {
+      cmsType: site.cmsType,
+      siteId: site.id,
+    })
+
     // 3. Load all Pages for the Site with changeIntents relation
     const pages = await prisma.page.findMany({
       where: { siteId: site.id },
