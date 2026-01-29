@@ -144,94 +144,109 @@ export async function generateInternalLinkChangeIntents(
       continue
     }
     
-    // For WordPress, check HTML for contextual internal links - STRICT ESCALATION RULES
-    if (cmsType === 'WORDPRESS' && htmlContentMap) {
-      const htmlContent = htmlContentMap.get(article.id)
-      if (htmlContent) {
-        const { countContextualInternalLinks } = await import('./wordpress-html-detection')
-        const contextualLinkCount = countContextualInternalLinks(htmlContent, article.url)
-        
-        // WordPress MVP Rule: Generate intent ONLY if ZERO contextual internal links exist
-        // If at least one contextual link exists, do nothing
-        if (contextualLinkCount > 0) {
-          // Page has contextual links - skip generating intent
-          continue
-        }
-        
-        // Zero contextual links - generate ONE intent (one intent per type per page per run)
-        // Find one suitable target page
-        const targetPages = findTargetPages(article, pages, 1)
-        if (targetPages.length > 0) {
-          const intent: InternalLinkChangeIntent = {
-            intentType: IntentType.ADD_INTERNAL_LINK,
-            payload: {
-              pageId: article.id,
-              pageType: article.type,
-              pageUrl: article.url,
-              targetPageId: targetPages[0].id,
-              targetPageUrl: targetPages[0].url,
-              targetPageTitle: targetPages[0].title,
-              anchorText: targetPages[0].title,
-              reason: `Add contextual internal link to improve SEO. Page has zero contextual internal links.`,
-            },
-          }
-          intents.push(intent)
-        }
-        // Continue to next article (WordPress MVP: one intent per page)
+    // Explicitly separate WordPress and Shopify logic - NO cross-CMS fallback
+    if (cmsType === 'WORDPRESS') {
+      // WordPress logic: ONLY operates on rendered HTML
+      if (!htmlContentMap) {
+        // Critical: WordPress requires HTML content map - do NOT fall back to Shopify logic
+        console.warn(`[Internal Link Intent] WordPress page ${article.id} (${article.url}) missing HTML content map - skipping page`)
         continue
       }
-    }
-    
-    // Shopify logic (unchanged)
-    // Check existing internal link intents
-    let existingCount = 0
-    
-    if (existingIntentsMap) {
-      existingCount = existingIntentsMap.get(article.id) || 0
-    } else {
-      existingCount = countExistingInternalLinkIntents(article)
-    }
-
-    // Skip if article already has enough internal link intents
-    if (existingCount >= MIN_EXISTING_INTENTS_THRESHOLD) {
+      
+      const htmlContent = htmlContentMap.get(article.id)
+      if (!htmlContent || htmlContent.trim().length === 0) {
+        // Critical: WordPress requires HTML content - do NOT fall back to Shopify logic
+        console.warn(`[Internal Link Intent] WordPress page ${article.id} (${article.url}) missing HTML content - skipping page`)
+        continue
+      }
+      
+      const { countContextualInternalLinks } = await import('./wordpress-html-detection')
+      const contextualLinkCount = countContextualInternalLinks(htmlContent, article.url)
+      
+      // WordPress MVP Rule: Generate intent ONLY if ZERO contextual internal links exist
+      // If at least one contextual link exists, do nothing
+      if (contextualLinkCount > 0) {
+        // Page has contextual links - skip generating intent
+        continue
+      }
+      
+      // Zero contextual links - generate ONE intent (one intent per type per page per run)
+      // Find one suitable target page
+      const targetPages = findTargetPages(article, pages, 1)
+      if (targetPages.length > 0) {
+        const intent: InternalLinkChangeIntent = {
+          intentType: IntentType.ADD_INTERNAL_LINK,
+          payload: {
+            pageId: article.id,
+            pageType: article.type,
+            pageUrl: article.url,
+            targetPageId: targetPages[0].id,
+            targetPageUrl: targetPages[0].url,
+            targetPageTitle: targetPages[0].title,
+            anchorText: targetPages[0].title,
+            reason: `Add contextual internal link to improve SEO. Page has zero contextual internal links.`,
+          },
+        }
+        intents.push(intent)
+      }
+      // Continue to next article (WordPress MVP: one intent per page)
       continue
-    }
-
-    // Calculate how many new intents to generate (max 2, but respect existing count)
-    const intentsToGenerate = Math.min(
-      MAX_INTENTS_PER_PAGE,
-      MIN_EXISTING_INTENTS_THRESHOLD - existingCount
-    )
-
-    if (intentsToGenerate <= 0) {
-      continue
-    }
-
-    // Find suitable target pages for internal linking
-    const targetPages = findTargetPages(article, pages, intentsToGenerate)
-
-    if (targetPages.length === 0) {
-      // No suitable targets found - skip this article
-      continue
-    }
-
-    // Generate change intents for each target
-    for (const targetPage of targetPages) {
-      const intent: InternalLinkChangeIntent = {
-        intentType: IntentType.ADD_INTERNAL_LINK,
-        payload: {
-          pageId: article.id,
-          pageType: article.type,
-          pageUrl: article.url,
-          targetPageId: targetPage.id,
-          targetPageUrl: targetPage.url,
-          targetPageTitle: targetPage.title,
-          anchorText: targetPage.title, // Default to target page title as anchor text
-          reason: `Add internal link to improve SEO and user navigation. Target: ${targetPage.type} page "${targetPage.title}"`,
-        },
+    } else if (cmsType === 'SHOPIFY') {
+      // Shopify logic: ONLY uses change intents from database (unchanged)
+      // Check existing internal link intents
+      let existingCount = 0
+      
+      if (existingIntentsMap) {
+        existingCount = existingIntentsMap.get(article.id) || 0
+      } else {
+        existingCount = countExistingInternalLinkIntents(article)
       }
 
-      intents.push(intent)
+      // Skip if article already has enough internal link intents
+      if (existingCount >= MIN_EXISTING_INTENTS_THRESHOLD) {
+        continue
+      }
+
+      // Calculate how many new intents to generate (max 2, but respect existing count)
+      const intentsToGenerate = Math.min(
+        MAX_INTENTS_PER_PAGE,
+        MIN_EXISTING_INTENTS_THRESHOLD - existingCount
+      )
+
+      if (intentsToGenerate <= 0) {
+        continue
+      }
+
+      // Find suitable target pages for internal linking
+      const targetPages = findTargetPages(article, pages, intentsToGenerate)
+
+      if (targetPages.length === 0) {
+        // No suitable targets found - skip this article
+        continue
+      }
+
+      // Generate change intents for each target
+      for (const targetPage of targetPages) {
+        const intent: InternalLinkChangeIntent = {
+          intentType: IntentType.ADD_INTERNAL_LINK,
+          payload: {
+            pageId: article.id,
+            pageType: article.type,
+            pageUrl: article.url,
+            targetPageId: targetPage.id,
+            targetPageUrl: targetPage.url,
+            targetPageTitle: targetPage.title,
+            anchorText: targetPage.title, // Default to target page title as anchor text
+            reason: `Add internal link to improve SEO and user navigation. Target: ${targetPage.type} page "${targetPage.title}"`,
+          },
+        }
+
+        intents.push(intent)
+      }
+    } else {
+      // Unknown CMS type - skip safely
+      console.warn(`[Internal Link Intent] Unknown CMS type for page ${article.id} - skipping`)
+      continue
     }
   }
 

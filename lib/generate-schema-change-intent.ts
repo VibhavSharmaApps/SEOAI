@@ -123,8 +123,15 @@ export async function generateSchemaChangeIntent(
     return null
   }
 
-  // For WordPress, check HTML for existing schema - STRICT ESCALATION RULES
-  if (cmsType === 'WORDPRESS' && htmlContent) {
+  // Explicitly separate WordPress and Shopify logic - NO cross-CMS fallback
+  if (cmsType === 'WORDPRESS') {
+    // WordPress logic: ONLY operates on rendered HTML
+    if (!htmlContent || htmlContent.trim().length === 0) {
+      // Critical: WordPress requires HTML content - do NOT fall back to Shopify logic
+      console.warn(`[Schema Intent] WordPress page ${page.id} (${page.url}) missing HTML content - skipping page`)
+      return null
+    }
+    
     const { getSchemaType } = await import('./wordpress-html-detection')
     const existingSchemaType = getSchemaType(htmlContent)
     
@@ -151,11 +158,15 @@ export async function generateSchemaChangeIntent(
       // If we reach here, schema exists but is wrong type - generate intent
     }
     // If no schema exists, generate intent (fall through)
-  } else {
-    // For Shopify, check if schema already exists via change intents - do not override
+  } else if (cmsType === 'SHOPIFY') {
+    // Shopify logic: ONLY uses change intents from database
     if (hasExistingSchema(page)) {
       return null
     }
+  } else {
+    // Unknown CMS type - skip safely
+    console.warn(`[Schema Intent] Unknown CMS type for page ${page.id} - skipping`)
+    return null
   }
 
   // Extract site URL for schema construction

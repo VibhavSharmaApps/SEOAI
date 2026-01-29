@@ -160,8 +160,15 @@ export async function generateMetaChangeIntent(
   const issues: MetaChangeIntent['payload']['issues'] = {}
   let hasIssues = false
   
-  // For WordPress, use HTML content if provided - STRICT ESCALATION RULES
-  if (cmsType === 'WORDPRESS' && htmlContent) {
+  // Explicitly separate WordPress and Shopify logic - NO cross-CMS fallback
+  if (cmsType === 'WORDPRESS') {
+    // WordPress logic: ONLY operates on rendered HTML
+    if (!htmlContent || htmlContent.trim().length === 0) {
+      // Critical: WordPress requires HTML content - do NOT fall back to Shopify logic
+      console.warn(`[Meta Intent] WordPress page ${page.id} (${page.url}) missing HTML content - skipping page`)
+      return null
+    }
+    
     const { extractMetaTitle, extractMetaDescription } = await import('./wordpress-html-detection')
     const metaTitle = extractMetaTitle(htmlContent)
     const metaDescription = extractMetaDescription(htmlContent)
@@ -201,8 +208,8 @@ export async function generateMetaChangeIntent(
       // Meta description missing is a violation - mark as issue
       hasIssues = true
     }
-  } else {
-    // For Shopify, use database fields (existing logic)
+  } else if (cmsType === 'SHOPIFY') {
+    // Shopify logic: ONLY uses database fields (existing logic)
     const title = page.title?.trim() || ''
     
     if (!title || title.length === 0) {
@@ -234,6 +241,10 @@ export async function generateMetaChangeIntent(
         issues.title = titleIssues
       }
     }
+  } else {
+    // Unknown CMS type - skip safely
+    console.warn(`[Meta Intent] Unknown CMS type for page ${page.id} - skipping`)
+    return null
   }
   
   // If no issues found, return null
