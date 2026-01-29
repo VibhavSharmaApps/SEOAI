@@ -109,51 +109,95 @@ function generateRecommendations(issues: MetaChangeIntent['payload']['issues']):
  * Generates a ChangeIntent for meta tag updates if needed
  * 
  * @param page - Page record from database
+ * @param htmlContent - Optional HTML content for WordPress pages (fetched from live page)
+ * @param cmsType - CMS type ('SHOPIFY' or 'WORDPRESS')
  * @returns ChangeIntent object structure if changes are needed, null otherwise
  */
-export function generateMetaChangeIntent(page: Page): MetaChangeIntent | null {
+export async function generateMetaChangeIntent(
+  page: Page,
+  htmlContent?: string,
+  cmsType?: 'SHOPIFY' | 'WORDPRESS'
+): Promise<MetaChangeIntent | null> {
   const issues: MetaChangeIntent['payload']['issues'] = {}
   let hasIssues = false
   
-  // Check title
-  const title = page.title?.trim() || ''
-  
-  if (!title || title.length === 0) {
-    issues.title = {
-      missing: true,
-      currentValue: page.title || '',
+  // For WordPress, use HTML content if provided
+  if (cmsType === 'WORDPRESS' && htmlContent) {
+    const { extractMetaTitle, extractMetaDescription } = await import('./wordpress-html-detection')
+    const metaTitle = extractMetaTitle(htmlContent)
+    const metaDescription = extractMetaDescription(htmlContent)
+    
+    // Check title from HTML
+    if (!metaTitle || metaTitle.length === 0) {
+      issues.title = {
+        missing: true,
+        currentValue: '',
+      }
+      hasIssues = true
+    } else {
+      const titleIssues: MetaChangeIntent['payload']['issues']['title'] = {}
+      
+      // Check title length
+      if (metaTitle.length < MIN_TITLE_LENGTH) {
+        titleIssues.tooShort = true
+        hasIssues = true
+      } else if (metaTitle.length > MAX_TITLE_LENGTH) {
+        titleIssues.tooLong = true
+        hasIssues = true
+      }
+      
+      // Check if title is generic/weak
+      if (isWeakTitle(metaTitle)) {
+        titleIssues.generic = true
+        hasIssues = true
+      }
+      
+      if (Object.keys(titleIssues).length > 0) {
+        titleIssues.currentValue = metaTitle
+        issues.title = titleIssues
+      }
     }
-    hasIssues = true
+    
+    // Check meta description (only for WordPress)
+    if (!metaDescription || metaDescription.length === 0) {
+      // Meta description missing is an issue, but we don't have a field for it yet
+      // We can add it to recommendations
+      hasIssues = true
+    }
   } else {
-    const titleIssues: MetaChangeIntent['payload']['issues']['title'] = {}
+    // For Shopify, use database fields (existing logic)
+    const title = page.title?.trim() || ''
     
-    // Check title length
-    if (title.length < MIN_TITLE_LENGTH) {
-      titleIssues.tooShort = true
+    if (!title || title.length === 0) {
+      issues.title = {
+        missing: true,
+        currentValue: page.title || '',
+      }
       hasIssues = true
-    } else if (title.length > MAX_TITLE_LENGTH) {
-      titleIssues.tooLong = true
-      hasIssues = true
-    }
-    
-    // Check if title is generic/weak
-    if (isWeakTitle(title)) {
-      titleIssues.generic = true
-      hasIssues = true
-    }
-    
-    if (Object.keys(titleIssues).length > 0) {
-      titleIssues.currentValue = title
-      issues.title = titleIssues
+    } else {
+      const titleIssues: MetaChangeIntent['payload']['issues']['title'] = {}
+      
+      // Check title length
+      if (title.length < MIN_TITLE_LENGTH) {
+        titleIssues.tooShort = true
+        hasIssues = true
+      } else if (title.length > MAX_TITLE_LENGTH) {
+        titleIssues.tooLong = true
+        hasIssues = true
+      }
+      
+      // Check if title is generic/weak
+      if (isWeakTitle(title)) {
+        titleIssues.generic = true
+        hasIssues = true
+      }
+      
+      if (Object.keys(titleIssues).length > 0) {
+        titleIssues.currentValue = title
+        issues.title = titleIssues
+      }
     }
   }
-  
-  // Note: Meta description is not available in the Page model
-  // Since this function must be deterministic and not call APIs,
-  // we cannot check meta descriptions. This would require:
-  // 1. Storing meta descriptions in the Page model, OR
-  // 2. Calling Shopify API (which violates the deterministic requirement)
-  // For now, we only check title which is available in the model
   
   // If no issues found, return null
   if (!hasIssues) {
@@ -162,6 +206,15 @@ export function generateMetaChangeIntent(page: Page): MetaChangeIntent | null {
   
   // Generate recommendations
   const recommendations = generateRecommendations(issues)
+  
+  // Add meta description recommendation for WordPress if missing
+  if (cmsType === 'WORDPRESS' && htmlContent) {
+    const { extractMetaDescription } = await import('./wordpress-html-detection')
+    const metaDescription = extractMetaDescription(htmlContent)
+    if (!metaDescription || metaDescription.length === 0) {
+      recommendations.push('Add meta description tag (150-160 characters recommended)')
+    }
+  }
   
   // Return ChangeIntent structure
   return {

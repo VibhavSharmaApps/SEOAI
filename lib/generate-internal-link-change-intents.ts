@@ -114,12 +114,16 @@ function countExistingInternalLinkIntents(page: Page & { changeIntents?: Array<{
  * @param pages - Array of Page records (should include all pages from the same site)
  * @param existingIntentsMap - Optional map of pageId -> count of existing ADD_INTERNAL_LINK intents
  *                            If not provided, assumes 0 existing intents
+ * @param htmlContentMap - Optional map of pageId -> HTML content for WordPress pages
+ * @param cmsType - CMS type ('SHOPIFY' or 'WORDPRESS')
  * @returns Array of InternalLinkChangeIntent objects (max 1-2 per article)
  */
-export function generateInternalLinkChangeIntents(
+export async function generateInternalLinkChangeIntents(
   pages: (Page & { changeIntents?: Array<{ intentType: string }> })[],
-  existingIntentsMap?: Map<string, number>
-): InternalLinkChangeIntent[] {
+  existingIntentsMap?: Map<string, number>,
+  htmlContentMap?: Map<string, string>,
+  cmsType?: 'SHOPIFY' | 'WORDPRESS'
+): Promise<InternalLinkChangeIntent[]> {
   const intents: InternalLinkChangeIntent[] = []
 
   // Filter to only ARTICLE pages
@@ -131,6 +135,20 @@ export function generateInternalLinkChangeIntents(
 
   // Process each article
   for (const article of articlePages) {
+    // For WordPress, check HTML for existing internal links
+    if (cmsType === 'WORDPRESS' && htmlContentMap) {
+      const htmlContent = htmlContentMap.get(article.id)
+      if (htmlContent) {
+        const { countInternalLinks } = await import('./wordpress-html-detection')
+        const existingLinkCount = countInternalLinks(htmlContent, article.url)
+        
+        // If page already has internal links, skip generating more
+        if (existingLinkCount > 0) {
+          continue
+        }
+      }
+    }
+    
     // Check existing internal link intents
     let existingCount = 0
     

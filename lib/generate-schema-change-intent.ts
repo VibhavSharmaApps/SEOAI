@@ -109,19 +109,32 @@ function extractSiteUrl(pageUrl: string): string {
  * Generates a ChangeIntent for schema markup injection if needed
  * 
  * @param page - Page record from database (optionally with changeIntents relation)
+ * @param htmlContent - Optional HTML content for WordPress pages (fetched from live page)
+ * @param cmsType - CMS type ('SHOPIFY' or 'WORDPRESS')
  * @returns ChangeIntent object structure if schema is missing, null otherwise
  */
-export function generateSchemaChangeIntent(
-  page: Page & { changeIntents?: Array<{ intentType: string; status: string }> }
-): SchemaChangeIntent | null {
+export async function generateSchemaChangeIntent(
+  page: Page & { changeIntents?: Array<{ intentType: string; status: string }> },
+  htmlContent?: string,
+  cmsType?: 'SHOPIFY' | 'WORDPRESS'
+): Promise<SchemaChangeIntent | null> {
   // Only support ARTICLE and PRODUCT pages
   if (page.type !== 'ARTICLE' && page.type !== 'PRODUCT') {
     return null
   }
 
-  // Check if schema already exists - do not override
-  if (hasExistingSchema(page)) {
-    return null
+  // For WordPress, check HTML for existing schema
+  if (cmsType === 'WORDPRESS' && htmlContent) {
+    const { hasSchemaMarkup } = await import('./wordpress-html-detection')
+    if (hasSchemaMarkup(htmlContent)) {
+      // Schema already exists in HTML - do not override
+      return null
+    }
+  } else {
+    // For Shopify, check if schema already exists via change intents - do not override
+    if (hasExistingSchema(page)) {
+      return null
+    }
   }
 
   // Extract site URL for schema construction

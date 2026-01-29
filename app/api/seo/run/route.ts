@@ -5,6 +5,7 @@ import { getSiteFromSession, ShopifySessionTokenError } from '@/lib/get-site-fro
 import { generateMetaChangeIntent } from '@/lib/generate-meta-change-intent'
 import { generateInternalLinkChangeIntents } from '@/lib/generate-internal-link-change-intents'
 import { generateSchemaChangeIntent } from '@/lib/generate-schema-change-intent'
+import { fetchPageHTML } from '@/lib/wordpress-html-detection'
 import { applyIntent as applyShopifyIntent, ShopifyAdapterContext } from '@/lib/adapters/shopifyAdapter'
 import { applyIntent as applyWordPressIntent, WordPressAdapterContext } from '@/lib/adapters/wordpressAdapter'
 import { IntentType, IntentStatus } from '@/lib/enums'
@@ -107,7 +108,10 @@ export async function POST(request: Request) {
       )
     }
 
-    // 2. Load all Pages for the Site with changeIntents relation
+    // 2. Get CMS type from site
+    const cmsType = site.cmsType
+
+    // 3. Load all Pages for the Site with changeIntents relation
     const pages = await prisma.page.findMany({
       where: { siteId: site.id },
       include: {
@@ -144,12 +148,29 @@ export async function POST(request: Request) {
 
     console.log(`[SEO Run] Processing ${pages.length} pages for site ${site.id}`)
 
-    // 3. Run meta, internal link, and schema rule functions
+    // 4. For WordPress, fetch HTML content for all pages before detection
+    const htmlContentMap = new Map<string, string>()
+    if (cmsType === 'WORDPRESS') {
+      console.log(`[SEO Run] Fetching HTML content for ${pages.length} WordPress pages...`)
+      for (const page of pages) {
+        try {
+          const html = await fetchPageHTML(page.url)
+          htmlContentMap.set(page.id, html)
+        } catch (error) {
+          console.warn(`[SEO Run] Failed to fetch HTML for page ${page.id} (${page.url}):`, error)
+          // Continue with other pages even if one fails
+        }
+      }
+      console.log(`[SEO Run] Fetched HTML for ${htmlContentMap.size} pages`)
+    }
+
+    // 4. Run meta, internal link, and schema rule functions
 
     // Generate meta change intents (one per page)
-    const metaIntents: Array<{ page: typeof pages[0]; intent: NonNullable<ReturnType<typeof generateMetaChangeIntent>> }> = []
+    const metaIntents: Array<{ page: typeof pages[0]; intent: NonNullable<Awaited<ReturnType<typeof generateMetaChangeIntent>>> }> = []
     for (const page of pages) {
-      const intent = generateMetaChangeIntent(page)
+      const htmlContent = htmlContentMap.get(page.id)
+      const intent = await generateMetaChangeIntent(page, htmlContent, cmsType)
       if (intent) {
         metaIntents.push({ page, intent })
       }
@@ -165,12 +186,18 @@ export async function POST(request: Request) {
     }
 
     // Generate internal link change intents (for ARTICLE pages only)
-    const internalLinkIntents = generateInternalLinkChangeIntents(pages, existingIntentsMap)
+    const internalLinkIntents = await generateInternalLinkChangeIntents(
+      pages,
+      existingIntentsMap,
+      htmlContentMap,
+      cmsType
+    )
 
     // Generate schema change intents (one per page)
-    const schemaIntents: Array<{ page: typeof pages[0]; intent: NonNullable<ReturnType<typeof generateSchemaChangeIntent>> }> = []
+    const schemaIntents: Array<{ page: typeof pages[0]; intent: NonNullable<Awaited<ReturnType<typeof generateSchemaChangeIntent>>> }> = []
     for (const page of pages) {
-      const intent = generateSchemaChangeIntent(page)
+      const htmlContent = htmlContentMap.get(page.id)
+      const intent = await generateSchemaChangeIntent(page, htmlContent, cmsType)
       if (intent) {
         schemaIntents.push({ page, intent })
       }
@@ -237,8 +264,8 @@ export async function POST(request: Request) {
 
     console.log(`[SEO Run] Stored ${createdIntents.length} change intents in database`)
 
-    // 5. Apply each intent using the correct adapter based on CMS type
-    const cmsType = site.cmsType
+    // 6. Apply each intent using the correct adapter based on CMS type
+    // (cmsType already defined above)
 
     // Create adapter context and function based on CMS type
     let applyIntentFunction: (intent: any) => Promise<Record<string, any>>
