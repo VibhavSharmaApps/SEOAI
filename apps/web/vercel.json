@@ -1,7 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "nextjs",
-  "buildCommand": "cd ../.. && pnpm build --filter=@workforce/web",
-  "installCommand": "pnpm install",
-  "devCommand": "pnpm dev"
+  "framework": "nextjs"
 }

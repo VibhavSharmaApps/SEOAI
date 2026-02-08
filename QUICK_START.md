@@ -115,9 +115,9 @@ This is a **Turborepo monorepo**. You MUST configure the Root Directory correctl
 3. **Configure Project** (BEFORE deploying):
    - Framework: **Next.js**
    - Root Directory: **`apps/web`** ⚠️ **MUST BE SET**
-   - Build Command: `cd ../.. && pnpm build --filter=@workforce/web`
+   - Build Command: Leave empty (or use `pnpm build`)
    - Output Directory: `.next`
-   - Install Command: `pnpm install`
+   - Install Command: Leave empty (auto-detected)
    - Enable: "Include source files outside Root Directory"
 
 4. **Add Environment Variables** (with NEW rotated keys!):

@@ -26,9 +26,9 @@ Your project is a **Turborepo monorepo** with the Next.js app in `apps/web`. Fol
 - Check "Include source files outside of the Root Directory in the Build Step"
 
 **Build & Development Settings:**
-- **Build Command:** `cd ../.. && pnpm build --filter=@workforce/web`
+- **Build Command:** Leave empty (auto-detected) or use `pnpm build`
 - **Output Directory:** `.next` (default)
-- **Install Command:** `pnpm install` (at workspace root)
+- **Install Command:** Leave empty (auto-detected)
 - **Development Command:** `pnpm dev`
 
 **Node.js Version:**

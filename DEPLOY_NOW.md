@@ -13,9 +13,9 @@ Go to: **https://vercel.com/new**
 | Framework | Next.js |
 | **Root Directory** | **`apps/web`** ⚠️ |
 | Include source files | **✅ ENABLE** |
-| Build Command | `cd ../.. && pnpm build --filter=@workforce/web` |
+| Build Command | **(leave empty or use `pnpm build`)** |
 | Output Directory | `.next` |
-| Install Command | `pnpm install` |
+| Install Command | **(leave empty - auto-detected)** |
 
 ---
 
