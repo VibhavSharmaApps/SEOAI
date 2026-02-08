@@ -1,0 +1,44 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Testing
+coverage
+
+# Build outputs
+.next
+out
+dist
+build
+
+# Environment variables
+.env
+.env*.local
+
+# Logs
+*.log
+
+# Turbo
+.turbo
+
+# Misc
+.DS_Store
+*.pem
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Supabase
+.supabase
+
+# WordPress plugin (not needed for web deployment)
+apps/wp-plugin
+
+# Documentation (optional - remove if you want docs in deployment)
+*.md
+!apps/web/README.md
