@@ -127,20 +127,27 @@ NODE_ENV=development
 
 ### Deploy to Vercel
 
-1. **Install Vercel CLI** (optional):
-   ```bash
-   npm i -g vercel
-   ```
+**⚠️ IMPORTANT: This is a Turborepo monorepo!**
 
-2. **Connect GitHub Repository**:
+**Getting "No Next.js version detected" error?** → [VERCEL_ERROR_FIX.md](./VERCEL_ERROR_FIX.md)
+
+1. **Set Root Directory to `apps/web`** (CRITICAL):
    - Go to [vercel.com/new](https://vercel.com/new)
    - Import your Git repository
-   - Vercel will auto-detect the Turborepo configuration
+   - **BEFORE deploying:** Set Root Directory to `apps/web`
+   - Enable "Include source files outside Root Directory"
+   - See [VERCEL_SETUP.md](./VERCEL_SETUP.md) for detailed steps
 
-3. **Configure Environment Variables**:
+2. **Configure Build Settings**:
+   - **Build Command**: `cd ../.. && pnpm build --filter=@workforce/web`
+   - **Output Directory**: `.next`
+   - **Install Command**: `pnpm install`
+   - **Node Version**: 18.17.0 (auto-detected from `.nvmrc`)
+
+3. **Add Environment Variables**:
    - Add all variables from `.env.example` in Vercel Dashboard
    - Mark sensitive variables as "Sensitive"
-   - Configure for Production, Preview, and Development environments
+   - **IMPORTANT**: Rotate all API keys before deploying!
 
 4. **Deploy**:
    ```bash
@@ -151,15 +158,11 @@ NODE_ENV=development
    vercel --prod
    ```
 
-### Deployment Configuration
+### Troubleshooting
 
-The project is configured with:
-- **Build Command**: `pnpm build --filter=@workforce/web`
-- **Output Directory**: `apps/web/.next`
-- **Install Command**: `pnpm install`
-- **Node Version**: 18.17.0 (specified in `.nvmrc`)
-
-See [DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md) for complete deployment guide.
+- **"No Next.js version detected"**: [VERCEL_ERROR_FIX.md](./VERCEL_ERROR_FIX.md)
+- **Complete setup guide**: [VERCEL_SETUP.md](./VERCEL_SETUP.md)
+- **Pre-deployment checklist**: [DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md)
 
 ## 📖 Documentation
 

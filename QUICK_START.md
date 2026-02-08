@@ -102,16 +102,23 @@ git push origin main
 
 ## 🚢 Deploy to Vercel
 
-### Option 1: GitHub Integration (Recommended)
+### ⚠️ CRITICAL: Monorepo Configuration Required
+
+This is a **Turborepo monorepo**. You MUST configure the Root Directory correctly!
+
+**See [VERCEL_SETUP.md](./VERCEL_SETUP.md) for detailed instructions.**
+
+### Quick Setup:
 
 1. **Go to Vercel**: https://vercel.com/new
 2. **Import Repository**: Select your Git repository
-3. **Configure Project**:
-   - Framework: Next.js (auto-detected)
-   - Root Directory: Leave as root
-   - Build Command: `pnpm build --filter=@workforce/web`
-   - Output Directory: `apps/web/.next`
+3. **Configure Project** (BEFORE deploying):
+   - Framework: **Next.js**
+   - Root Directory: **`apps/web`** ⚠️ **MUST BE SET**
+   - Build Command: `cd ../.. && pnpm build --filter=@workforce/web`
+   - Output Directory: `.next`
    - Install Command: `pnpm install`
+   - Enable: "Include source files outside Root Directory"
 
 4. **Add Environment Variables** (with NEW rotated keys!):
    ```
@@ -128,6 +135,8 @@ git push origin main
    ```
 
 5. **Deploy**: Click "Deploy"
+
+**If you get "No Next.js version detected" error:** See [VERCEL_SETUP.md](./VERCEL_SETUP.md)
 
 ### Option 2: Vercel CLI
 
