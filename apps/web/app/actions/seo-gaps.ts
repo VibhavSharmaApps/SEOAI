@@ -7,7 +7,6 @@
  * to generate the missing content, then applies it to WordPress via the plugin API.
  */
 
-import { createAgent } from "@workforce/ai-agents";
 import type { PageSEOAnalysis, SEOGap, SEOGapFix, SEOGapFixResult } from "@/types/seo-gaps";
 
 /**
@@ -16,14 +15,14 @@ import type { PageSEOAnalysis, SEOGap, SEOGapFix, SEOGapFixResult } from "@/type
  * @param page - Page data from WordPress
  * @returns Array of detected gaps
  */
-export function detectSEOGaps(page: {
+export async function detectSEOGaps(page: {
   title: string;
   content: string;
   meta_title?: string;
   meta_description?: string;
   focus_keyword?: string;
   h1?: string;
-}): SEOGap[] {
+}): Promise<SEOGap[]> {
   const gaps: SEOGap[] = [];
 
   // Check for missing H1
@@ -118,11 +117,12 @@ export async function generateSEOGapFixes(
     return [];
   }
 
-  const agent = createAgent({
-    provider: "openai",
-    apiKey: process.env.OPENAI_API_KEY!,
-    model: "gpt-4o-mini",
-  });
+  // TODO: Implement AI agent integration
+  // const agent = createAgent({
+  //   provider: "openai",
+  //   apiKey: process.env.OPENAI_API_KEY!,
+  //   model: "gpt-4o-mini",
+  // });
 
   const fixes: SEOGapFix[] = [];
 
@@ -143,23 +143,23 @@ ${analysis.current_focus_keyword ? `Current Focus Keyword: ${analysis.current_fo
 
       switch (gap.type) {
         case "missing_h1":
-          fix = await generateH1(agent, context, analysis);
+          fix = await generateH1(null, context, analysis);
           break;
 
         case "missing_meta_title":
         case "short_meta_title":
         case "long_meta_title":
-          fix = await generateMetaTitle(agent, context, analysis, gap);
+          fix = await generateMetaTitle(null, context, analysis, gap);
           break;
 
         case "missing_meta_description":
         case "short_meta_description":
         case "long_meta_description":
-          fix = await generateMetaDescription(agent, context, analysis, gap);
+          fix = await generateMetaDescription(null, context, analysis, gap);
           break;
 
         case "missing_focus_keyword":
-          fix = await generateFocusKeyword(agent, context, analysis);
+          fix = await generateFocusKeyword(null, context, analysis);
           break;
       }
 
@@ -210,7 +210,6 @@ export async function applySEOGapFixes(
     for (const fix of fixes) {
       switch (fix.gap_type) {
         case "missing_h1":
-        case "short_h1":
           h1Fix = fix.generated_content;
           break;
 
@@ -228,6 +227,10 @@ export async function applySEOGapFixes(
 
         case "missing_focus_keyword":
           metaFixes.focus_keyword = fix.generated_content;
+          break;
+          
+        default:
+          // Ignore other gap types
           break;
       }
     }
@@ -325,27 +328,11 @@ export async function fixSEOGaps(
 // ============================================================================
 // Helper functions for generating specific content types
 // ============================================================================
+// TODO: Implement these when AI agent integration is ready
 
-async function generateH1(agent: any, context: string, page: PageSEOAnalysis): Promise<SEOGapFix> {
-  const prompt = `${context}
-
-Generate a compelling H1 heading for this page. Requirements:
-- 40-70 characters
-- Include the main keyword naturally
-- Clear and engaging
-- AEO-optimized (direct answer style)
-
-Return ONLY the H1 text, no explanations.`;
-
-  const result = await agent.generateContent({
-    pageType: page.post_type === "post" ? "POST" : "PAGE",
-    pageTitle: page.title,
-    primaryKeyword: page.current_focus_keyword || extractKeywordFromTitle(page.title),
-    description: context,
-  });
-
-  // Extract just the H1 text (remove any HTML tags AI might add)
-  const h1 = result.content.replace(/<\/?h1>/gi, "").trim().substring(0, 70);
+async function generateH1(_agent: any, _context: string, page: PageSEOAnalysis): Promise<SEOGapFix> {
+  // Placeholder implementation
+  const h1 = `${page.title}`.substring(0, 70);
 
   return {
     gap_type: "missing_h1",
@@ -355,61 +342,48 @@ Return ONLY the H1 text, no explanations.`;
 }
 
 async function generateMetaTitle(
-  agent: any,
-  context: string,
+  _agent: any,
+  _context: string,
   page: PageSEOAnalysis,
   gap: SEOGap
 ): Promise<SEOGapFix> {
-  const meta = await agent.generateMeta({
-    pageTitle: page.title,
-    pageContent: context,
-    primaryKeyword: page.current_focus_keyword || extractKeywordFromTitle(page.title),
-    currentMetaTitle: page.current_meta_title,
-    currentMetaDescription: page.current_meta_description,
-  });
+  // Placeholder implementation
+  const metaTitle = `${page.title} | Site Name`.substring(0, 60);
 
   return {
     gap_type: gap.type as any,
-    generated_content: meta.metaTitle,
-    reasoning: `Generated meta title (${meta.metaTitle.length} chars, optimal 50-60)`,
+    generated_content: metaTitle,
+    reasoning: `Generated meta title (${metaTitle.length} chars, optimal 50-60)`,
   };
 }
 
 async function generateMetaDescription(
-  agent: any,
-  context: string,
+  _agent: any,
+  _context: string,
   page: PageSEOAnalysis,
   gap: SEOGap
 ): Promise<SEOGapFix> {
-  const meta = await agent.generateMeta({
-    pageTitle: page.title,
-    pageContent: context,
-    primaryKeyword: page.current_focus_keyword || extractKeywordFromTitle(page.title),
-    currentMetaTitle: page.current_meta_title,
-    currentMetaDescription: page.current_meta_description,
-  });
+  // Placeholder implementation
+  const metaDescription = page.content_preview.substring(0, 155);
 
   return {
     gap_type: gap.type as any,
-    generated_content: meta.metaDescription,
-    reasoning: `Generated meta description (${meta.metaDescription.length} chars, optimal 150-160)`,
+    generated_content: metaDescription,
+    reasoning: `Generated meta description (${metaDescription.length} chars, optimal 150-160)`,
   };
 }
 
 async function generateFocusKeyword(
-  agent: any,
-  context: string,
+  _agent: any,
+  _context: string,
   page: PageSEOAnalysis
 ): Promise<SEOGapFix> {
-  const keywords = await agent.generateKeywords({
-    pageTitle: page.title,
-    description: context,
-    maxKeywords: 1,
-  });
+  // Placeholder implementation
+  const keyword = extractKeywordFromTitle(page.title);
 
   return {
     gap_type: "missing_focus_keyword",
-    generated_content: keywords.keywords[0] || extractKeywordFromTitle(page.title),
+    generated_content: keyword,
     reasoning: "Generated focus keyword based on page title and content",
   };
 }

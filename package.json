@@ -10,8 +10,7 @@
     "type-check": "turbo type-check",
     "clean": "turbo clean",
     "dev:web": "turbo dev --filter=@workforce/web",
-    "build:web": "turbo build --filter=@workforce/web",
-    "postinstall": "pnpm build --filter=@workforce/supabase"
+    "build:web": "turbo build --filter=@workforce/web"
   },
   "devDependencies": {
     "turbo": "^2.0.0",

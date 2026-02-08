@@ -59,11 +59,11 @@ export const serverEnv = {
 export function validateEnv() {
   try {
     // Validate all required env vars
-    env.supabase.url;
-    env.supabase.anonKey;
-    env.app.url;
-    serverEnv.supabase.serviceRoleKey;
-    serverEnv.database.url;
+    const _url = env.supabase.url;
+    const _anonKey = env.supabase.anonKey;
+    const _appUrl = env.app.url;
+    const _serviceRoleKey = serverEnv.supabase.serviceRoleKey;
+    const _dbUrl = serverEnv.database.url;
     
     console.log('✅ Environment variables validated successfully');
     return true;

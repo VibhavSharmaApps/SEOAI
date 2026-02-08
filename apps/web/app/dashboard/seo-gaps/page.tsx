@@ -7,7 +7,7 @@
  * 3. Applying fixes autonomously via the WordPress plugin API
  */
 
-import { detectSEOGaps, generateSEOGapFixes, applySEOGapFixes } from "@/app/actions/seo-gaps";
+import { detectSEOGaps, generateSEOGapFixes } from "@/app/actions/seo-gaps";
 import type { PageSEOAnalysis } from "@/types/seo-gaps";
 
 // Example: This would come from your WordPress site via API
@@ -26,7 +26,7 @@ const EXAMPLE_PAGE: PageSEOAnalysis = {
 
 export default async function SEOGapsDashboard() {
   // Step 1: Detect gaps
-  const gaps = detectSEOGaps({
+  const gaps = await detectSEOGaps({
     title: EXAMPLE_PAGE.title,
     content: EXAMPLE_PAGE.content_preview,
     meta_title: EXAMPLE_PAGE.current_meta_title,
@@ -39,7 +39,6 @@ export default async function SEOGapsDashboard() {
 
   // Step 2: Generate fixes (Server Component can await!)
   let fixes = null;
-  let fixResult = null;
 
   if (gaps.length > 0) {
     try {
@@ -109,7 +108,7 @@ export default async function SEOGapsDashboard() {
                     <h3 className="font-semibold">{gap.message}</h3>
                     {gap.currentValue && (
                       <p className="text-sm text-muted-foreground mt-1">
-                        Current: "{gap.currentValue}"
+                        Current: &quot;{gap.currentValue}&quot;
                       </p>
                     )}
                     {gap.expectedRange && (
