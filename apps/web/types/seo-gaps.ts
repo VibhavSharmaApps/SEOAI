@@ -38,6 +38,10 @@ export interface PageSEOAnalysis {
   current_meta_title?: string;
   current_meta_description?: string;
   current_focus_keyword?: string;
+  current_schema?: string; // JSON string of existing schema
+  author?: string;
+  date_published?: string;
+  date_modified?: string;
 }
 
 export interface SEOGapFix {

@@ -8,6 +8,7 @@
  */
 
 import type { PageSEOAnalysis, SEOGap, SEOGapFix, SEOGapFixResult } from "@/types/seo-gaps";
+import { generateSchemaForPageType, schemaToJson } from "@/lib/schema-factory";
 
 /**
  * Analyze a page for SEO gaps
@@ -22,6 +23,7 @@ export async function detectSEOGaps(page: {
   meta_description?: string;
   focus_keyword?: string;
   h1?: string;
+  current_schema?: string;
 }): Promise<SEOGap[]> {
   const gaps: SEOGap[] = [];
 
@@ -101,7 +103,53 @@ export async function detectSEOGaps(page: {
     });
   }
 
+  // Check for missing schema
+  const schemaGap = detectSchemaGap(page.current_schema);
+  if (schemaGap) {
+    gaps.push(schemaGap);
+  }
+
   return gaps;
+}
+
+/**
+ * Detect missing schema markup
+ *
+ * @param currentSchema - Existing schema JSON string (if any)
+ * @returns Schema gap or null
+ */
+export function detectSchemaGap(currentSchema?: string): SEOGap | null {
+  // Check if schema exists and is valid
+  if (!currentSchema || currentSchema.trim().length === 0) {
+    return {
+      type: "missing_schema",
+      severity: "high",
+      message: "Page is missing structured data (JSON-LD schema)",
+    };
+  }
+
+  // Try to validate JSON
+  try {
+    const schema = JSON.parse(currentSchema);
+    
+    // Check for required schema.org fields
+    if (!schema["@context"] || !schema["@type"]) {
+      return {
+        type: "missing_schema",
+        severity: "high",
+        message: "Existing schema is invalid (missing @context or @type)",
+        currentValue: currentSchema.substring(0, 100),
+      };
+    }
+  } catch (error) {
+    return {
+      type: "missing_schema",
+      severity: "high",
+      message: "Existing schema has invalid JSON syntax",
+    };
+  }
+
+  return null;
 }
 
 /**
@@ -161,6 +209,10 @@ ${analysis.current_focus_keyword ? `Current Focus Keyword: ${analysis.current_fo
         case "missing_focus_keyword":
           fix = await generateFocusKeyword(null, context, analysis);
           break;
+
+        case "missing_schema":
+          fix = await generateSchema(analysis);
+          break;
       }
 
       if (fix) {
@@ -206,6 +258,7 @@ export async function applySEOGapFixes(
     // Group fixes by type
     const metaFixes: Record<string, string> = {};
     let h1Fix: string | null = null;
+    let schemaFix: string | null = null;
 
     for (const fix of fixes) {
       switch (fix.gap_type) {
@@ -227,6 +280,10 @@ export async function applySEOGapFixes(
 
         case "missing_focus_keyword":
           metaFixes.focus_keyword = fix.generated_content;
+          break;
+
+        case "missing_schema":
+          schemaFix = fix.generated_content;
           break;
           
         default:
@@ -253,6 +310,22 @@ export async function applySEOGapFixes(
           prepend_h1: h1Fix, // Custom field for the plugin to handle
         },
       });
+    }
+
+    // Add schema injection operation
+    if (schemaFix) {
+      try {
+        const schema = JSON.parse(schemaFix);
+        operations.push({
+          action: "update_schema",
+          post_id: wpPostId,
+          payload: {
+            schema,
+          },
+        });
+      } catch (error) {
+        console.error("[SEO Gaps] Invalid schema JSON:", error);
+      }
     }
 
     // Send batch request to WordPress
@@ -385,6 +458,34 @@ async function generateFocusKeyword(
     gap_type: "missing_focus_keyword",
     generated_content: keyword,
     reasoning: "Generated focus keyword based on page title and content",
+  };
+}
+
+/**
+ * Generate JSON-LD schema markup using SchemaFactory
+ *
+ * @param page - Page SEO analysis data
+ * @returns SEO gap fix with schema JSON
+ */
+async function generateSchema(page: PageSEOAnalysis): Promise<SEOGapFix> {
+  // Use SchemaFactory to generate appropriate schema based on page type
+  const schema = generateSchemaForPageType(page.post_type, {
+    title: page.title,
+    description: page.current_meta_description || page.content_preview.substring(0, 155),
+    url: page.url,
+    author: page.author,
+    datePublished: page.date_published,
+    dateModified: page.date_modified,
+    keywords: page.current_focus_keyword,
+  });
+
+  // Convert to JSON string
+  const schemaJson = schemaToJson(schema);
+
+  return {
+    gap_type: "missing_schema",
+    generated_content: schemaJson,
+    reasoning: `Generated ${page.post_type === "post" ? "Article" : "WebPage"} schema with structured data for search engines`,
   };
 }
 

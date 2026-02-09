@@ -68,6 +68,9 @@ final class Workforce_SEO
         // Register REST API endpoints (Dashboard -> WordPress communication)
         add_action('rest_api_init', [Workforce_REST_API::class, 'register_routes']);
 
+        // Output JSON-LD schema to page head
+        add_action('wp_head', [$this, 'output_json_ld_schema'], 1);
+
         // Enqueue admin assets
         add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_admin_assets' ] );
 
@@ -106,6 +109,50 @@ final class Workforce_SEO
             'nonce'    => wp_create_nonce('workforce_nonce'),
             'rest_url' => rest_url('workforce/v1/'),
         ]);
+    }
+
+    /**
+     * Output JSON-LD schema markup to page head.
+     * 
+     * Retrieves schema stored in post meta by the dashboard and outputs it
+     * as structured data for search engines.
+     */
+    public function output_json_ld_schema(): void
+    {
+        // Only output on singular posts/pages
+        if (!is_singular()) {
+            return;
+        }
+
+        $post_id = get_the_ID();
+        if (!$post_id) {
+            return;
+        }
+
+        // Retrieve stored schema from post meta
+        $schema_json = get_post_meta($post_id, '_workforce_schema', true);
+
+        // Exit if no schema is stored
+        if (empty($schema_json)) {
+            return;
+        }
+
+        // Use wp_unslash to prevent double-escaping of JSON
+        $schema_json = wp_unslash($schema_json);
+
+        // Validate JSON before output
+        $schema = json_decode($schema_json, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            // Invalid JSON, don't output
+            return;
+        }
+
+        // Output JSON-LD schema
+        echo "\n<!-- Workforce SEO: JSON-LD Schema -->\n";
+        echo '<script type="application/ld+json">';
+        echo $schema_json;
+        echo '</script>';
+        echo "\n<!-- /Workforce SEO -->\n";
     }
 
     /**

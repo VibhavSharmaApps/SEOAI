@@ -28,10 +28,11 @@ class Workforce_SEO_Analyzer
             'meta_title'    => $this->get_meta_title($post->ID),
             'meta_desc'     => $this->get_meta_description($post->ID),
             'focus_keyword' => $this->get_focus_keyword($post->ID),
-            'h1'            => $this->extract_h1($content),
+            'h1'            => $this->extract_h1($content) ?: get_the_title($post),
             'headings'      => $this->extract_headings($content),
             'word_count'    => str_word_count(wp_strip_all_tags($content)),
             'last_modified' => $post->post_modified_gmt,
+            'faq_candidates' => $this->extract_potential_faq($content),
         ];
     }
 
@@ -73,6 +74,42 @@ class Workforce_SEO_Analyzer
             }
         }
         return $headings;
+    }
+
+    /**
+     * Extract potential FAQ content from post
+     *
+     * Finds all H2/H3 headings that end with a question mark and extracts
+     * the paragraph immediately following them as potential FAQ answers.
+     *
+     * @param string $content Post content HTML
+     * @return array Array of FAQ candidates with question and answer
+     */
+    public function extract_potential_faq(string $content): array
+    {
+        $faq_candidates = [];
+
+        // Pattern to match H2 or H3 tags ending with question mark, followed by paragraph
+        // This captures: heading level, question text, and the following paragraph
+        $pattern = '/<h([23])[^>]*>(.*?\?)<\/h[23]>\s*(<p[^>]*>.*?<\/p>)/si';
+
+        if (preg_match_all($pattern, $content, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $match) {
+                $question = wp_strip_all_tags($match[2]);
+                $answer = wp_strip_all_tags($match[3]);
+
+                // Only include if both question and answer are not empty
+                if (!empty(trim($question)) && !empty(trim($answer))) {
+                    $faq_candidates[] = [
+                        'question' => trim($question),
+                        'answer'   => trim($answer),
+                        'heading_level' => (int) $match[1],
+                    ];
+                }
+            }
+        }
+
+        return $faq_candidates;
     }
 
     private function get_meta_title(int $post_id): string
