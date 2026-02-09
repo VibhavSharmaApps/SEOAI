@@ -145,8 +145,8 @@ export default async function SEOGapsDashboard() {
                     AI Generated
                   </code>
                 </div>
-                <div className="bg-muted p-3 rounded mb-2 font-mono text-sm">
-                  {fix.generated_content}
+                <div className="bg-muted p-3 rounded mb-2 font-mono text-sm overflow-x-auto">
+                  <pre className="whitespace-pre-wrap break-words">{fix.generated_content}</pre>
                 </div>
                 <p className="text-sm text-muted-foreground italic">
                   {fix.reasoning}
