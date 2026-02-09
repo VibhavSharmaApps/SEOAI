@@ -21,6 +21,7 @@ const EXAMPLE_PAGE: PageSEOAnalysis = {
   current_meta_title: "Coffee", // TOO SHORT!
   current_meta_description: undefined, // MISSING!
   current_focus_keyword: undefined, // MISSING!
+  current_schema: undefined, // MISSING!
   gaps: [], // Will be populated
 };
 
@@ -33,6 +34,7 @@ export default async function SEOGapsDashboard() {
     meta_description: EXAMPLE_PAGE.current_meta_description,
     focus_keyword: EXAMPLE_PAGE.current_focus_keyword,
     h1: EXAMPLE_PAGE.current_h1,
+    current_schema: EXAMPLE_PAGE.current_schema,
   });
 
   EXAMPLE_PAGE.gaps = gaps;
