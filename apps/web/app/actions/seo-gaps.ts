@@ -113,12 +113,12 @@ export async function detectSEOGaps(page: {
 }
 
 /**
- * Detect missing schema markup
+ * Detect missing schema markup (internal helper)
  *
  * @param currentSchema - Existing schema JSON string (if any)
  * @returns Schema gap or null
  */
-export function detectSchemaGap(currentSchema?: string): SEOGap | null {
+function detectSchemaGap(currentSchema?: string): SEOGap | null {
   // Check if schema exists and is valid
   if (!currentSchema || currentSchema.trim().length === 0) {
     return {
