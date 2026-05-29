@@ -8,6 +8,7 @@
     "build": "turbo build",
     "lint": "turbo lint",
     "type-check": "turbo type-check",
+    "test": "turbo test",
     "clean": "turbo clean",
     "dev:web": "turbo dev --filter=@workforce/web",
     "build:web": "turbo build --filter=@workforce/web"

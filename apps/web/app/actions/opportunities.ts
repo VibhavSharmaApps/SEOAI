@@ -6,8 +6,13 @@
  * Syncs ranked keywords from DataForSEO and manages opportunities.
  */
 
-import { createAdminClient } from "@/lib/supabase";
+import { revalidatePath } from "next/cache";
+import { createAdminClient, createServerSupabase } from "@/lib/supabase";
 import { findOpportunities, type OpportunityData } from "@/lib/dataforseo";
+import { ensureProjectForSite } from "./projects";
+import { getSite } from "./sites";
+import { logger } from "@/lib/logger";
+import type { Opportunity, OpportunityStatus, OpportunityPriority } from "@/types/database";
 
 /**
  * Sync opportunities for a project
@@ -261,4 +266,114 @@ export async function getProjectOpportunityStats(projectId: string) {
   };
 
   return stats;
+}
+
+// ============================================================================
+// RLS-aware actions for the dashboard UI
+// ============================================================================
+
+export type OpportunitySortField =
+  | "opportunity_score"
+  | "search_volume"
+  | "current_position"
+  | "traffic_gain"
+  | "keyword";
+
+export interface OpportunityListInput {
+  siteId?: string;
+  filters?: {
+    status?: OpportunityStatus;
+    priority?: OpportunityPriority;
+    minScore?: number;
+    keyword?: string;
+  };
+  sort?: { field: OpportunitySortField; direction: "asc" | "desc" };
+}
+
+export async function listOpportunitiesForCurrentUser(
+  input: OpportunityListInput = {}
+): Promise<Opportunity[]> {
+  const supabase = createServerSupabase();
+
+  let projectIds: string[] | null = null;
+  if (input.siteId) {
+    const { data: projects } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("site_id", input.siteId);
+    if (!projects || projects.length === 0) return [];
+    projectIds = projects.map((p) => p.id);
+  }
+
+  let query = supabase.from("opportunities").select("*");
+
+  if (projectIds) query = query.in("project_id", projectIds);
+  if (input.filters?.status) query = query.eq("status", input.filters.status);
+  if (input.filters?.priority) query = query.eq("priority", input.filters.priority);
+  if (typeof input.filters?.minScore === "number") {
+    query = query.gte("opportunity_score", input.filters.minScore);
+  }
+  if (input.filters?.keyword && input.filters.keyword.trim()) {
+    query = query.ilike("keyword", `%${input.filters.keyword.trim()}%`);
+  }
+
+  const sortField = input.sort?.field ?? "opportunity_score";
+  const ascending = input.sort?.direction === "asc";
+  query = query.order(sortField, { ascending });
+
+  const { data, error } = await query;
+  if (error) {
+    logger.error("listOpportunitiesForCurrentUser failed", error);
+    return [];
+  }
+  return (data ?? []) as Opportunity[];
+}
+
+export type SyncResult =
+  | { ok: true; opportunitiesCount: number }
+  | { ok: false; error: string };
+
+export async function syncOpportunitiesForSite(siteId: string): Promise<SyncResult> {
+  const site = await getSite(siteId);
+  if (!site) return { ok: false, error: "Site not found." };
+
+  const project = await ensureProjectForSite(siteId);
+  if (!project) return { ok: false, error: "Could not get or create a project for this site." };
+
+  const result = await syncProjectOpportunities(project.id);
+  revalidatePath("/dashboard/opportunities");
+
+  if (result.success) {
+    return { ok: true, opportunitiesCount: result.opportunitiesCount ?? 0 };
+  }
+  return { ok: false, error: result.error ?? "Sync failed." };
+}
+
+export type StatusUpdateResult = { ok: true } | { ok: false; error: string };
+
+export async function setOpportunityStatus(
+  opportunityId: string,
+  status: OpportunityStatus,
+  notes?: string
+): Promise<StatusUpdateResult> {
+  // Ownership check via RLS — if the user doesn't own this opportunity, the
+  // SELECT will return null and we refuse the update.
+  const supabase = createServerSupabase();
+  const { data: owned } = await supabase
+    .from("opportunities")
+    .select("id")
+    .eq("id", opportunityId)
+    .maybeSingle();
+
+  if (!owned) return { ok: false, error: "Opportunity not found." };
+
+  try {
+    await updateOpportunityStatus(opportunityId, status, notes);
+  } catch (err) {
+    logger.error("setOpportunityStatus failed", err, { opportunityId });
+    return { ok: false, error: err instanceof Error ? err.message : "Update failed." };
+  }
+
+  revalidatePath("/dashboard/opportunities");
+  return { ok: true };
 }

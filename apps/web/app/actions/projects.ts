@@ -5,6 +5,54 @@
  */
 
 import { createAdminClient } from "@/lib/supabase";
+import type { Project } from "@/types/database";
+import { logger } from "@/lib/logger";
+
+// Idempotent: returns the existing project for a site, or creates a default
+// project derived from the site's metadata. Called by sites.verifySiteConnection
+// so users automatically have something for opportunities sync to write into.
+export async function ensureProjectForSite(siteId: string): Promise<Project | null> {
+  const supabase = createAdminClient();
+
+  const { data: existing } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("site_id", siteId)
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) return existing as Project;
+
+  const { data: site, error: siteError } = await supabase
+    .from("sites")
+    .select("id, name, domain, wp_site_url")
+    .eq("id", siteId)
+    .single();
+
+  if (siteError || !site) {
+    logger.warn("ensureProjectForSite: site not found", { siteId });
+    return null;
+  }
+
+  const { data: project, error } = await supabase
+    .from("projects")
+    .insert({
+      site_id: siteId,
+      name: site.name ?? site.domain,
+      wp_url: site.wp_site_url,
+      dataforseo_domain: site.domain,
+      dataforseo_location_code: 2840,
+      dataforseo_language_code: "en",
+    })
+    .select()
+    .single();
+
+  if (error) {
+    logger.error("ensureProjectForSite: insert failed", error, { siteId });
+    return null;
+  }
+  return project as Project;
+}
 
 /**
  * Create a new project

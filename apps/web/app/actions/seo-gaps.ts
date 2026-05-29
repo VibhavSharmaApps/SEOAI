@@ -9,6 +9,45 @@
 
 import type { PageSEOAnalysis, SEOGap, SEOGapFix, SEOGapFixResult } from "@/types/seo-gaps";
 import { generateSchemaForPageType, schemaToJson } from "@/lib/schema-factory";
+import { serverEnv } from "@/lib/env";
+import { logger } from "@/lib/logger";
+import {
+  tryCreateAIProvider,
+  withFallback,
+  generateMetaTitleWithAI,
+  generateMetaDescriptionWithAI,
+  generateH1WithAI,
+  generateFocusKeywordWithAI,
+  generateSchemaDescriptionWithAI,
+  type PageInput,
+} from "@workforce/ai-agents";
+
+function buildAgentPageInput(page: PageSEOAnalysis): PageInput {
+  return {
+    title: page.title,
+    url: page.url,
+    contentPreview: page.content_preview,
+    focusKeyword: page.current_focus_keyword,
+    currentMetaTitle: page.current_meta_title,
+    currentMetaDescription: page.current_meta_description,
+  };
+}
+
+function buildPrimaryAndFallback() {
+  const primary = tryCreateAIProvider({
+    anthropicKey: serverEnv.ai.anthropicKey,
+    openaiKey: serverEnv.ai.openaiKey,
+    prefer: "anthropic",
+  });
+  const fallback = tryCreateAIProvider({
+    anthropicKey: serverEnv.ai.anthropicKey,
+    openaiKey: serverEnv.ai.openaiKey,
+    prefer: "openai",
+  });
+  const isSameProvider =
+    primary && fallback && primary.name === fallback.name;
+  return { primary, fallback: isSameProvider ? null : fallback };
+}
 
 /**
  * Analyze a page for SEO gaps
@@ -165,16 +204,11 @@ export async function generateSEOGapFixes(
     return [];
   }
 
-  // TODO: Implement AI agent integration
-  // const agent = createAgent({
-  //   provider: "openai",
-  //   apiKey: process.env.OPENAI_API_KEY!,
-  //   model: "gpt-4o-mini",
-  // });
-
   const fixes: SEOGapFix[] = [];
 
-  // Build context for AI
+  // `context` is a legacy free-form string that predates the typed PageInput
+  // pipeline. Kept here because the helper signatures still accept it, but
+  // the real AI prompts are built from analysis fields via buildAgentPageInput.
   const context = `
 Page Title: ${analysis.title}
 URL: ${analysis.url}
@@ -184,34 +218,59 @@ ${analysis.current_meta_description ? `Current Meta Description: ${analysis.curr
 ${analysis.current_focus_keyword ? `Current Focus Keyword: ${analysis.current_focus_keyword}` : ""}
   `.trim();
 
-  // Process each gap
+  // Phase 1 — focus keyword first.
+  //
+  // The focus keyword feeds every downstream prompt (H1, meta title, meta
+  // description) via PageInput.focusKeyword. If the page is missing one, we
+  // generate it BEFORE the other agents run, then patch a shallow copy of the
+  // analysis with the new keyword so subsequent generators see it. If the
+  // page already has a focus keyword, this phase is a no-op and we fall
+  // straight through to phase 2 using the original analysis.
+  let workingAnalysis: PageSEOAnalysis = analysis;
+  const focusKeywordGap = analysis.gaps.find((g) => g.type === "missing_focus_keyword");
+  if (focusKeywordGap) {
+    try {
+      const fix = await generateFocusKeyword(null, context, analysis);
+      fixes.push(fix);
+      // Shallow copy is fine — we only need to override current_focus_keyword
+      // for the duration of this call. The original analysis is untouched.
+      workingAnalysis = { ...analysis, current_focus_keyword: fix.generated_content };
+    } catch (error) {
+      logger.error("Error generating fix for missing_focus_keyword", error, {
+        gapType: "missing_focus_keyword",
+      });
+      // If the focus-keyword generator throws, fall through with the original
+      // analysis — downstream agents still work, just without keyword priming.
+    }
+  }
+
+  // Phase 2 — every other gap, using the enriched analysis. We skip
+  // missing_focus_keyword here because it was already handled in phase 1.
   for (const gap of analysis.gaps) {
+    if (gap.type === "missing_focus_keyword") continue;
+
     try {
       let fix: SEOGapFix | null = null;
 
       switch (gap.type) {
         case "missing_h1":
-          fix = await generateH1(null, context, analysis);
+          fix = await generateH1(null, context, workingAnalysis);
           break;
 
         case "missing_meta_title":
         case "short_meta_title":
         case "long_meta_title":
-          fix = await generateMetaTitle(null, context, analysis, gap);
+          fix = await generateMetaTitle(null, context, workingAnalysis, gap);
           break;
 
         case "missing_meta_description":
         case "short_meta_description":
         case "long_meta_description":
-          fix = await generateMetaDescription(null, context, analysis, gap);
-          break;
-
-        case "missing_focus_keyword":
-          fix = await generateFocusKeyword(null, context, analysis);
+          fix = await generateMetaDescription(null, context, workingAnalysis, gap);
           break;
 
         case "missing_schema":
-          fix = await generateSchema(analysis);
+          fix = await generateSchema(workingAnalysis);
           break;
       }
 
@@ -219,7 +278,7 @@ ${analysis.current_focus_keyword ? `Current Focus Keyword: ${analysis.current_fo
         fixes.push(fix);
       }
     } catch (error) {
-      console.error(`[SEO Gaps] Error generating fix for ${gap.type}:`, error);
+      logger.error(`Error generating fix for ${gap.type}`, error, { gapType: gap.type });
     }
   }
 
@@ -401,16 +460,39 @@ export async function fixSEOGaps(
 // ============================================================================
 // Helper functions for generating specific content types
 // ============================================================================
-// TODO: Implement these when AI agent integration is ready
+// Note: generateMetaTitle, generateMetaDescription, and generateH1 are now
+// wired to the real AI agents in @workforce/ai-agents. generateFocusKeyword
+// and generateSchema are still stubs / template-driven and are tracked as
+// follow-up vertical slices.
 
 async function generateH1(_agent: any, _context: string, page: PageSEOAnalysis): Promise<SEOGapFix> {
-  // Placeholder implementation
-  const h1 = `${page.title}`.substring(0, 70);
+  // Build providers (Anthropic primary, OpenAI fallback) and the shared PageInput
+  // shape consumed by every agent in @workforce/ai-agents.
+  const { primary, fallback } = buildPrimaryAndFallback();
+  const input = buildAgentPageInput(page);
+
+  const result = await withFallback(
+    primary,
+    fallback,
+    (provider) => generateH1WithAI(provider, input),
+    (err) => logger.warn("H1 primary provider failed, trying fallback", { error: String(err) })
+  );
+
+  // If neither provider is configured, fall back to the old stub so that
+  // dev/demo flows without API keys keep rendering instead of throwing.
+  if (!result) {
+    const h1 = `${page.title}`.substring(0, 70);
+    return {
+      gap_type: "missing_h1",
+      generated_content: h1,
+      reasoning: `AI provider not configured — used placeholder (${h1.length} chars, optimal 20-70)`,
+    };
+  }
 
   return {
     gap_type: "missing_h1",
-    generated_content: h1,
-    reasoning: "Generated AEO-optimized H1 based on page context and primary keyword",
+    generated_content: result.text,
+    reasoning: `Generated by ${result.provider} (${result.model}), ${result.text.length} chars${result.inRange ? "" : " — outside 20-70 target"}`,
   };
 }
 
@@ -420,13 +502,29 @@ async function generateMetaTitle(
   page: PageSEOAnalysis,
   gap: SEOGap
 ): Promise<SEOGapFix> {
-  // Placeholder implementation
-  const metaTitle = `${page.title} | Site Name`.substring(0, 60);
+  const { primary, fallback } = buildPrimaryAndFallback();
+  const input = buildAgentPageInput(page);
+
+  const result = await withFallback(
+    primary,
+    fallback,
+    (provider) => generateMetaTitleWithAI(provider, input),
+    (err) => logger.warn("Meta title primary provider failed, trying fallback", { error: String(err) })
+  );
+
+  if (!result) {
+    const metaTitle = `${page.title} | Site Name`.substring(0, 60);
+    return {
+      gap_type: gap.type as any,
+      generated_content: metaTitle,
+      reasoning: `AI provider not configured — used placeholder (${metaTitle.length} chars, optimal 50-60)`,
+    };
+  }
 
   return {
     gap_type: gap.type as any,
-    generated_content: metaTitle,
-    reasoning: `Generated meta title (${metaTitle.length} chars, optimal 50-60)`,
+    generated_content: result.text,
+    reasoning: `Generated by ${result.provider} (${result.model}), ${result.text.length} chars${result.inRange ? "" : " — outside 50-60 target"}`,
   };
 }
 
@@ -436,13 +534,29 @@ async function generateMetaDescription(
   page: PageSEOAnalysis,
   gap: SEOGap
 ): Promise<SEOGapFix> {
-  // Placeholder implementation
-  const metaDescription = page.content_preview.substring(0, 155);
+  const { primary, fallback } = buildPrimaryAndFallback();
+  const input = buildAgentPageInput(page);
+
+  const result = await withFallback(
+    primary,
+    fallback,
+    (provider) => generateMetaDescriptionWithAI(provider, input),
+    (err) => logger.warn("Meta description primary provider failed, trying fallback", { error: String(err) })
+  );
+
+  if (!result) {
+    const metaDescription = page.content_preview.substring(0, 155);
+    return {
+      gap_type: gap.type as any,
+      generated_content: metaDescription,
+      reasoning: `AI provider not configured — used placeholder (${metaDescription.length} chars, optimal 150-160)`,
+    };
+  }
 
   return {
     gap_type: gap.type as any,
-    generated_content: metaDescription,
-    reasoning: `Generated meta description (${metaDescription.length} chars, optimal 150-160)`,
+    generated_content: result.text,
+    reasoning: `Generated by ${result.provider} (${result.model}), ${result.text.length} chars${result.inRange ? "" : " — outside 150-160 target"}`,
   };
 }
 
@@ -451,27 +565,76 @@ async function generateFocusKeyword(
   _context: string,
   page: PageSEOAnalysis
 ): Promise<SEOGapFix> {
-  // Placeholder implementation
-  const keyword = extractKeywordFromTitle(page.title);
+  // Same provider + PageInput plumbing as the other generators. Focus keyword
+  // is special in that its output feeds back into downstream agents via
+  // PageInput.focusKeyword — so AI quality here compounds across the suite.
+  const { primary, fallback } = buildPrimaryAndFallback();
+  const input = buildAgentPageInput(page);
+
+  const result = await withFallback(
+    primary,
+    fallback,
+    (provider) => generateFocusKeywordWithAI(provider, input),
+    (err) => logger.warn("Focus keyword primary provider failed, trying fallback", { error: String(err) })
+  );
+
+  // No-key dev/demo fallback: keep the old title-derived extraction so the
+  // dashboard demo still renders something instead of throwing.
+  if (!result) {
+    const keyword = extractKeywordFromTitle(page.title);
+    return {
+      gap_type: "missing_focus_keyword",
+      generated_content: keyword,
+      reasoning: `AI provider not configured — used placeholder extracted from title (${keyword.length} chars)`,
+    };
+  }
 
   return {
     gap_type: "missing_focus_keyword",
-    generated_content: keyword,
-    reasoning: "Generated focus keyword based on page title and content",
+    generated_content: result.text,
+    reasoning: `Generated by ${result.provider} (${result.model}), ${result.text.length} chars${result.inRange ? "" : " — outside 3-50 target"}`,
   };
 }
 
 /**
- * Generate JSON-LD schema markup using SchemaFactory
+ * Generate JSON-LD schema markup using SchemaFactory.
  *
- * @param page - Page SEO analysis data
+ * The template (URL, author, dates, type-based shape) stays factory-driven.
+ * The `description` field is the one piece that benefits from AI: the old
+ * fallback (current meta description, else first 155 chars of content) is
+ * weak when both meta description and the page intro are also weak. We
+ * generate a schema-tuned description (factual, CTA-free) when an AI
+ * provider is available, and fall back to the original logic otherwise.
+ *
+ * The `keywords` field receives `page.current_focus_keyword` which, in the
+ * orchestrator's phase-1/phase-2 flow, has already been replaced with the
+ * AI-generated focus keyword via the workingAnalysis copy. So keywords is
+ * implicitly AI-enriched without any extra work here.
+ *
+ * @param page - Page SEO analysis data (post-focus-keyword-priming)
  * @returns SEO gap fix with schema JSON
  */
 async function generateSchema(page: PageSEOAnalysis): Promise<SEOGapFix> {
-  // Use SchemaFactory to generate appropriate schema based on page type
+  const { primary, fallback } = buildPrimaryAndFallback();
+  const input = buildAgentPageInput(page);
+
+  // Try AI for the description field. If providers aren't configured or both
+  // throw, withFallback returns null and we fall back to the legacy logic.
+  const aiDesc = await withFallback(
+    primary,
+    fallback,
+    (provider) => generateSchemaDescriptionWithAI(provider, input),
+    (err) => logger.warn("Schema description primary provider failed, trying fallback", { error: String(err) })
+  );
+
+  // Resolve final description: AI output if available, else the original
+  // fallback chain (existing meta description, else 155-char content slice).
+  const resolvedDescription =
+    aiDesc?.text ?? page.current_meta_description ?? page.content_preview.substring(0, 155);
+
   const schema = generateSchemaForPageType(page.post_type, {
     title: page.title,
-    description: page.current_meta_description || page.content_preview.substring(0, 155),
+    description: resolvedDescription,
     url: page.url,
     author: page.author,
     datePublished: page.date_published,
@@ -479,13 +642,18 @@ async function generateSchema(page: PageSEOAnalysis): Promise<SEOGapFix> {
     keywords: page.current_focus_keyword,
   });
 
-  // Convert to JSON string
   const schemaJson = schemaToJson(schema);
+
+  // Reasoning string makes the AI vs fallback path visible in the dashboard
+  // so we can see at a glance which generator did what.
+  const reasoning = aiDesc
+    ? `Generated ${page.post_type === "post" ? "Article" : "WebPage"} schema; description by ${aiDesc.provider} (${aiDesc.model}), ${aiDesc.text.length} chars${aiDesc.inRange ? "" : " — outside 100-250 target"}`
+    : `Generated ${page.post_type === "post" ? "Article" : "WebPage"} schema; description from ${page.current_meta_description ? "existing meta description" : "content preview truncation"} (AI provider not configured)`;
 
   return {
     gap_type: "missing_schema",
     generated_content: schemaJson,
-    reasoning: `Generated ${page.post_type === "post" ? "Article" : "WebPage"} schema with structured data for search engines`,
+    reasoning,
   };
 }
 

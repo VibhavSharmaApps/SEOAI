@@ -1,20 +1,21 @@
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+
 export default function Home() {
   return (
     <div className="min-h-screen flex items-center justify-center p-8">
-      <main className="max-w-4xl mx-auto text-center">
-        <h1 className="text-4xl font-bold mb-4">
-          Workforce SEO
-        </h1>
-        <p className="text-xl text-gray-600 dark:text-gray-400 mb-8">
-          AI-Powered SEO Automation Platform
+      <main className="max-w-2xl mx-auto text-center space-y-6">
+        <h1 className="text-4xl font-bold tracking-tight">Workforce SEO</h1>
+        <p className="text-xl text-muted-foreground">
+          AI-powered SEO automation for WordPress sites.
         </p>
-        <div className="flex gap-4 justify-center">
-          <a
-            href="/dashboard/seo-gaps"
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            SEO Gaps Dashboard
-          </a>
+        <div className="flex gap-3 justify-center pt-4">
+          <Button asChild size="lg">
+            <Link href="/signup">Get started</Link>
+          </Button>
+          <Button asChild size="lg" variant="outline">
+            <Link href="/login">Sign in</Link>
+          </Button>
         </div>
       </main>
     </div>
