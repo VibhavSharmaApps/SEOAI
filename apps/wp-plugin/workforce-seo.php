@@ -27,6 +27,7 @@ require_once WORKFORCE_PLUGIN_DIR . 'includes/class-api-client.php';
 require_once WORKFORCE_PLUGIN_DIR . 'includes/class-seo-analyzer.php';
 require_once WORKFORCE_PLUGIN_DIR . 'includes/class-admin-page.php';
 require_once WORKFORCE_PLUGIN_DIR . 'includes/class-rest-api.php';
+require_once WORKFORCE_PLUGIN_DIR . 'includes/class-hooks.php';
 
 /**
  * Main plugin class.
@@ -67,6 +68,9 @@ final class Workforce_SEO
 
         // Register REST API endpoints (Dashboard -> WordPress communication)
         add_action('rest_api_init', [Workforce_REST_API::class, 'register_routes']);
+
+        // Wire up WP→Dashboard webhooks (real-time cache sync).
+        Workforce_Hooks::init();
 
         // Output JSON-LD schema to page head
         add_action('wp_head', [$this, 'output_json_ld_schema'], 1);
@@ -164,6 +168,7 @@ final class Workforce_SEO
         add_option('workforce_api_url', '');
         add_option('workforce_api_key', '');
         add_option('workforce_site_id', '');
+        add_option('workforce_webhook_secret', '');
         flush_rewrite_rules();
     }
 

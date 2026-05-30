@@ -8,7 +8,9 @@ import { cn } from "@/lib/utils";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard/opportunities", label: "Opportunities", icon: Target },
-  { href: "/dashboard/audit", label: "SEO Audit", icon: FileSearch },
+  // SEO Audit links straight to the real analysis flow at /dashboard/seo-gaps.
+  // The old /dashboard/audit stub used to live here as a placeholder.
+  { href: "/dashboard/seo-gaps", label: "SEO Audit", icon: FileSearch },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 

@@ -137,3 +137,49 @@ export function buildSchemaDescriptionUser(page: PageInput): string {
 export function buildRetryUser(originalUser: string, lastResponse: string, targetMin: number, targetMax: number): string {
   return `${originalUser}\n\nYour previous response was ${lastResponse.length} characters: "${lastResponse}"\nTarget is ${targetMin}-${targetMax} characters. Try again and return ONLY the corrected text.`;
 }
+
+// ============================================================
+// GEO: FAQ content generator
+// ============================================================
+// FAQ content is the first structured-output agent. Output is a JSON array
+// of {question, answer} pairs, not a single string. Retry semantics differ
+// from length-based agents — we retry when the item COUNT is out of range,
+// not when the text length is.
+
+export const FAQ_CONTENT_SYSTEM = `You are an SEO and Generative Engine Optimization (GEO) specialist. Generate FAQ content that helps the page be cited by AI search engines (ChatGPT, Perplexity, Google AI Overviews). Rules:
+- Generate 3-5 question-and-answer pairs (no more, no less).
+- Questions reflect real search intent — what someone would actually ask in a search engine or AI chatbot about this topic.
+- Questions are direct and conversational, end with a question mark.
+- Answers are factual, concise (1-3 sentences), and self-contained — do NOT refer to "this article", "the page above", "as mentioned", etc. Each answer must stand alone if extracted by an AI engine.
+- Include the focus keyword naturally in at least 2 questions or answers when one is provided. Do not force it.
+- No clickbait, no hype, no superlatives like "best" or "amazing".
+- Output a valid JSON array of objects with "question" and "answer" string fields. No markdown code fences. No commentary. No preamble. No trailing notes.
+- Format: [{"question": "...", "answer": "..."}, ...]`;
+
+export function buildFAQContentUser(page: PageInput): string {
+  return [
+    `Page title: ${page.title}`,
+    `URL: ${page.url}`,
+    page.focusKeyword ? `Focus keyword: ${page.focusKeyword}` : null,
+    "",
+    "Page content:",
+    page.contentPreview.slice(0, 2000),
+    "",
+    "Generate 3-5 FAQ pairs as a JSON array.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
+ * Retry prompt used when the previous response had the wrong NUMBER of FAQ
+ * pairs (parser returned 0/1/2 or 6+). Different from buildRetryUser above
+ * which targets character length — for FAQ we care about item count.
+ */
+export function buildFAQRetryUser(originalUser: string, gotCount: number, min: number, max: number): string {
+  const reason =
+    gotCount === 0
+      ? "Your previous response could not be parsed as a JSON array of FAQ objects."
+      : `Your previous response had ${gotCount} valid FAQ pair${gotCount === 1 ? "" : "s"}.`;
+  return `${originalUser}\n\n${reason} We need ${min}-${max}. Try again and return ONLY a JSON array of ${min}-${max} objects with "question" and "answer" string fields. No code fences, no commentary.`;
+}

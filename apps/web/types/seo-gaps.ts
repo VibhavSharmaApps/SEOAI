@@ -4,7 +4,7 @@
  * Identifies missing or suboptimal SEO elements on WordPress pages.
  */
 
-export type SEOGapType = 
+export type SEOGapType =
   | "missing_h1"
   | "missing_meta_title"
   | "missing_meta_description"
@@ -14,6 +14,7 @@ export type SEOGapType =
   | "long_meta_description"
   | "missing_focus_keyword"
   | "missing_schema"
+  | "missing_faq"
   | "missing_alt_text";
 
 export interface SEOGap {
@@ -55,4 +56,34 @@ export interface SEOGapFixResult {
   fixes: SEOGapFix[];
   applied: boolean;
   error?: string;
+  // Per-fix outcome from the WP plugin's batch /execute response. Populated
+  // when the batch call returned (even on partial failure). Empty/undefined
+  // when the batch call itself failed (network, auth, plugin missing).
+  results?: SEOGapFixOpResult[];
+}
+
+export interface SEOGapFixOpResult {
+  gap_type: SEOGapType;
+  success: boolean;
+  error?: string;
+}
+
+export interface AuditLogEntry {
+  operation: string;
+  // Flat list of field names that changed. Always present — for pre-B3
+  // entries it's the only thing the plugin wrote, and for post-B3 entries
+  // it's derived from changes[].name as a fast path for UI rendering.
+  fields: string[];
+  // Captured before/after values, present only on post-B3 entries. Drives
+  // the revert button: entries without `changes` are non-revertable and
+  // the UI greys out their revert button accordingly.
+  changes?: AuditLogChange[];
+  timestamp: string;
+  source: string;
+}
+
+export interface AuditLogChange {
+  name: string;
+  old: string | null;
+  new: string | null;
 }

@@ -1,7 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useTransition } from "react";
-import { MoreHorizontal, ExternalLink, ShieldCheck, Trash2 } from "lucide-react";
+import {
+  MoreHorizontal,
+  ExternalLink,
+  ShieldCheck,
+  Trash2,
+  FileText,
+} from "lucide-react";
 import { toast } from "sonner";
 import { verifySiteConnection, deleteSite } from "@/app/actions/sites";
 import {
@@ -87,6 +94,16 @@ export function SiteCard({ site }: { site: Site }) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem asChild>
+              {/* Browse pages is a navigation item, not a state-changing action,
+                  so it goes at the top of the menu where it's most discoverable.
+                  Always rendered — if the site isn't verified yet, the target
+                  page surfaces the relevant error. */}
+              <Link href={`/dashboard/sites/${site.id}/pages`}>
+                <FileText className="mr-2 h-4 w-4" />
+                Browse pages
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={handleVerify}>
               <ShieldCheck className="mr-2 h-4 w-4" />
               Verify connection

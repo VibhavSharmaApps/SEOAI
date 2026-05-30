@@ -68,7 +68,26 @@ if (!defined('ABSPATH')) {
                         spellcheck="false"
                     />
                     <p class="description">
-                        <?php esc_html_e('Optional. Shown in the dashboard after you connect this site.', 'workforce-seo'); ?>
+                        <?php esc_html_e('Shown in the dashboard after you connect this site. Required for real-time sync.', 'workforce-seo'); ?>
+                    </p>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row">
+                    <label for="workforce_webhook_secret"><?php esc_html_e('Webhook Secret', 'workforce-seo'); ?></label>
+                </th>
+                <td>
+                    <input
+                        type="text"
+                        id="workforce_webhook_secret"
+                        name="workforce_webhook_secret"
+                        value="<?php echo esc_attr(get_option('workforce_webhook_secret', '')); ?>"
+                        class="regular-text code"
+                        autocomplete="off"
+                        spellcheck="false"
+                    />
+                    <p class="description">
+                        <?php esc_html_e('Paste the webhook secret from your Workforce dashboard. When set, post edits and deletions are pushed to the dashboard in real time so the pages browser stays current.', 'workforce-seo'); ?>
                     </p>
                 </td>
             </tr>

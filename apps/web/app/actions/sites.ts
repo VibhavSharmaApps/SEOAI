@@ -26,6 +26,16 @@ function generateApiKey(): string {
   return randomBytes(16).toString("hex");
 }
 
+/**
+ * Generate a 32-byte (64 hex char) webhook signing secret. Stronger than
+ * the api_key because it's used for HMAC-SHA256 signatures — collisions
+ * matter more, and the user only pastes it once into the plugin so length
+ * doesn't hurt UX.
+ */
+function generateWebhookSecret(): string {
+  return randomBytes(32).toString("hex");
+}
+
 function deriveDomain(wpSiteUrl: string): string {
   try {
     return new URL(wpSiteUrl).hostname.toLowerCase();
@@ -89,6 +99,9 @@ export async function createSite(
   const wpSiteUrl = parsed.data.wp_site_url.replace(/\/+$/, "");
   const domain = deriveDomain(wpSiteUrl);
   const apiKey = generateApiKey();
+  // Generated alongside the api_key so the wizard can display both
+  // together in a single one-time-reveal flow.
+  const webhookSecret = generateWebhookSecret();
 
   const supabase = createServerSupabase();
   const { data, error } = await supabase
@@ -100,6 +113,7 @@ export async function createSite(
       domain,
       wp_site_url: wpSiteUrl,
       api_key: apiKey,
+      webhook_secret: webhookSecret,
       is_active: false,
     })
     .select()
@@ -134,12 +148,19 @@ export async function verifySiteConnection(
   }
 
   const supabase = createServerSupabase();
+  // Backfill the webhook_secret for legacy sites created before migration
+  // 00005 — they have NULL secrets, so the verify flow doubles as the
+  // opt-in path for webhooks.
+  const updatePayload: Record<string, unknown> = {
+    is_active: true,
+    wp_rest_url: result.wpRestUrl,
+  };
+  if (!site.webhook_secret) {
+    updatePayload.webhook_secret = generateWebhookSecret();
+  }
   const { error } = await supabase
     .from("sites")
-    .update({
-      is_active: true,
-      wp_rest_url: result.wpRestUrl,
-    })
+    .update(updatePayload)
     .eq("id", siteId);
 
   if (error) {

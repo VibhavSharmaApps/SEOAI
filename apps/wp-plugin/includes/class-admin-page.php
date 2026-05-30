@@ -50,6 +50,12 @@ class Workforce_Admin_Page
             'sanitize_callback' => 'sanitize_text_field',
             'default'           => '',
         ]);
+
+        register_setting('workforce_settings', 'workforce_webhook_secret', [
+            'type'              => 'string',
+            'sanitize_callback' => 'sanitize_text_field',
+            'default'           => '',
+        ]);
     }
 
     public static function render_page(): void

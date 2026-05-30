@@ -25,4 +25,6 @@ export { generateFocusKeywordWithAI } from "./agents/focus-keyword";
 export type { FocusKeywordResult } from "./agents/focus-keyword";
 export { generateSchemaDescriptionWithAI } from "./agents/schema-description";
 export type { SchemaDescriptionResult } from "./agents/schema-description";
+export { generateFAQContentWithAI } from "./agents/faq-content";
+export type { FAQContentResult, FAQPair } from "./agents/faq-content";
 export type { PageInput } from "./agents/prompts";
